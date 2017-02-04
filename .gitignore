@@ -10,5 +10,10 @@ test*
 *.log
 lib/googletest/build
 lib/googletest/obj
+test-data/lambda/*
 
 !test_src
+!test-data
+!test-data/lambda/layout-miniasm.gfa
+!test-data/lambda/NC_001416.fa
+!test-data/lambda/reads.fastq
