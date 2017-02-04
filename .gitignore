@@ -1,0 +1,12 @@
+bin/
+obj*
+temp*
+test*
+*.o
+.cproject
+.project
+.settings
+*.tee
+*.log
+
+!test_src
