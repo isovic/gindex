@@ -1,0 +1,3 @@
+[submodule "codebase/seqlib"]
+	path = codebase/seqlib
+	url = https://github.com/isovic/seqlib

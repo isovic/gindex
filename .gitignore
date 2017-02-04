@@ -8,5 +8,7 @@ test*
 .settings
 *.tee
 *.log
+lib/googletest/build
+lib/googletest/obj
 
 !test_src
