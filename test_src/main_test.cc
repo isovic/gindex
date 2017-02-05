@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdint.h>
 #include "gtest/gtest.h"
+#include "test1.h"
 
 GTEST_API_ int main(int argc, char **argv) {
   testing::InitGoogleTest(&argc, argv);

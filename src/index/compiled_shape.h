@@ -5,12 +5,14 @@
  *      Author: isovic
  */
 
-#ifndef SRC_OWLER2_COMPILED_SHAPE_H_
-#define SRC_OWLER2_COMPILED_SHAPE_H_
+#ifndef SRC_MINIMIZERINDEX_COMPILED_SHAPE_H_
+#define SRC_MINIMIZERINDEX_COMPILED_SHAPE_H_
 
 #include <stdint.h>
 #include <string>
 #include <vector>
+
+namespace is {
 
 struct Mask {
   int32_t start = 0;
@@ -21,29 +23,52 @@ struct Mask {
 
 class CompiledShape {
  public:
-  std::vector<Mask> masks;
-  std::string shape = "";
-  int32_t num_incl_bits = 0;
-
   CompiledShape() { };
   CompiledShape(const std::string new_shape) { Compile(new_shape); };
+
+  /* Creates a compiled shape for a given string description of the shape.
+   * The string is composed of characters '0' and '1', where '0' describes
+   * a don't care base, and '1' an inclusive base.
+   */
   void Compile(const std::string new_shape);
 
-  /// Takes a buffer of bases (max 32 bases in 64-bits), 2bit packed, and extracts those inclusive ones (defined by a shape).
-  /// Parameters:
-  ///  @buffer an integer containing 2-bit packed values of the sequence, max. 32 bases from the starting position.
-  ///  @shape a string specifying the shape to be extracted from the buffer. Specified with '1' as inclusive bases and '0' as don't care bases.
+  /* Takes a buffer of bases (max 32 bases in 64-bits), 2bit packed, and extracts those inclusive ones (defined by a shape).
+   * @buffer an integer containing 2-bit packed values of the sequence, max. 32 bases from the starting position.
+   * @shape a string specifying the shape to be extracted from the buffer. Specified with '1' as inclusive bases and '0' as don't care bases.
+   */
   uint64_t CreateSeedFromShape(uint64_t bases2bit) const;
+
+  const std::vector<Mask>& masks() const {
+    return masks_;
+  }
+
+  int32_t num_incl_bits() const {
+    return num_incl_bits_;
+  }
+
+  const std::string& shape() const {
+    return shape_;
+  }
+
+ private:
+  std::vector<Mask> masks_;
+  std::string shape_ = "";
+  int32_t num_incl_bits_ = 0;
 };
 
 std::vector<CompiledShape> CompileShapes(const std::vector<std::string> &shapes);
 
-// For a given shape, for every don't cate ('0') base generate all three combinations for the same seed, containing at the position: 0 (deletion), 1 (match/mismatch) and 2 (insertion).
-// E.g. for a shape "1110111", this function will generate three shapes: "11111", "1110111" and "11100111".
-// The shapes vector is not cleared, so the function can be re-used to add multiple shapes.
+/* For a given shape, for every don't cate ('0') base generate all three combinations for the same seed,
+ * containing at the position: 0 (deletion), 1 (match/mismatch) and 2 (insertion).
+ * E.g. for a shape "1110111", this function will generate three shapes: "11111", "1110111" and "11100111".
+ * The shapes vector is not cleared, so the function can be re-used to add multiple shapes.
+ */
 int CreateLookupShapes(std::string index_shape, std::vector<std::string> &shapes);
 
-// Converts a base 10 number x to a base N number with n digits.
+/* Converts a base 10 number x to a base N number with n digits.
+ */
 void Base10ToBaseN(int32_t x, int32_t N, int32_t n, std::vector<int8_t> &digits);
 
-#endif /* SRC_OWLER2_COMPILED_SHAPE_H_ */
+} /* Namespace is. */
+
+#endif /* SRC_MINIMIZERINDEX_COMPILED_SHAPE_H_ */

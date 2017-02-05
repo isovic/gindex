@@ -11,9 +11,14 @@ test*
 lib/googletest/build
 lib/googletest/obj
 test-data/lambda/*
+test-data/simple/*
+dump*
 
 !test_src
 !test-data
 !test-data/lambda/layout-miniasm.gfa
 !test-data/lambda/NC_001416.fa
 !test-data/lambda/reads.fastq
+!test-data/simple
+!test-data/simple/test1.fa 
+!test-data/simple/test2.fa 

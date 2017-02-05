@@ -86,7 +86,7 @@ TEST_CC_FILES :=  $(wildcard $(TEST_SOURCE_DIR)/*/*.cc) $(wildcard $(TEST_SOURCE
 TEST_H_FILES := $(wildcard $(TEST_SOURCE_DIR)/*.h) $(wildcard $(TEST_SOURCE_DIR)/*.hpp) $(H_FILES) $(wildcard $(TEST_SOURCE_DIR)/*/*.h) $(wildcard $(TEST_SOURCE_DIR)/*/*.hpp)
 OBJ_FILES_TEST := $(addprefix $(OBJ_TEST_DIR)/,$(CPP_FILES:.cpp=.o)) $(addprefix $(OBJ_TEST_DIR)/,$(CC_FILES:.cc=.o)) $(addprefix $(OBJ_TEST_DIR)/,$(TEST_CC_FILES:.cc=.o)) $(GTEST_DIR)/build/gtest.a
 OBJ_FILES_TEST_DEBUG := $(addprefix $(OBJ_TEST_DEBUG_DIR)/,$(CPP_FILES:.cpp=.o)) $(addprefix $(OBJ_TEST_DEBUG_DIR)/,$(CC_FILES:.cc=.o)) $(addprefix $(OBJ_TEST_DEBUG_DIR)/,$(TEST_CC_FILES:.cc=.o)) $(GTEST_DIR)/build/gtest.a
-TEST_MACROS = -DRUN_ALL_TESTS_
+TEST_MACROS = -DRUN_ALL_TESTS_ -DGTEST_HAS_TR1_TUPLE=0 -DGTEST_USE_OWN_TR1_TUPLE=0
 
 test: $(GTEST_DIR)/build/gtest.a $(OBJ_FILES_TEST)
 	@echo [LD TESTS] $<
