@@ -329,14 +329,16 @@ int MinimizerIndex::CollectSeedsForSeq_(const int8_t* seqdata, const int8_t* seq
 
       /// Extract gapped spaced seeds from the buffer.
       for (int64_t shape_id=0; shape_id<compiled_shapes.size(); shape_id++) {
+        auto num_inclusive_bases = compiled_shapes[shape_id].num_incl_bits()/2;
+
         uint64_t seed = compiled_shapes[shape_id].CreateSeedFromShape(buffer);
-        uint64_t key = SeedHashFunction_(seed);
+        uint64_t key = SeedHashFunctionDefault_(seed, num_inclusive_bases);
         uint64_t position = pos + split_start[i]; // + 1;     // Make the position 1-based.
         seed_list_fwd[seed_id] = make_seed(key, seq_id_fwd, position);
 //        seed_id += 1;
 
-        uint64_t rev_seed = ReverseComplementSeed_(seed, compiled_shapes[shape_id].num_incl_bits()/2);
-        uint64_t rev_key = SeedHashFunction_(rev_seed);
+        uint64_t rev_seed = ReverseComplementSeed_(seed, num_inclusive_bases);
+        uint64_t rev_key = SeedHashFunctionDefault_(rev_seed, num_inclusive_bases);
         uint64_t rev_position = (seqlen - position - 1); // | kIndexIdReverse64;
         seed_list_rev[seed_id] = make_seed(rev_key, seq_id_rev, rev_position);
 
@@ -349,7 +351,7 @@ int MinimizerIndex::CollectSeedsForSeq_(const int8_t* seqdata, const int8_t* seq
   return seed_id;
 }
 
-inline uint64_t MinimizerIndex::SeedHashFunction_(uint64_t seed) {
+inline uint64_t MinimizerIndex::SeedHashFunctionDefault_(uint64_t seed, int32_t k) {
   return seed;
 }
 
@@ -365,13 +367,15 @@ inline uint64_t MinimizerIndex::ReverseComplementSeed_(uint64_t seed, int32_t nu
 
 // Parameter window_len specifies the length of the window in the number of bases. For each base, there may be more than one seed
 // (e.g. rev. complement, multiple indexes, etc.), and for this reason the parameter num_seeds_per_base is given.
+// For example, if the array consists of a linear chain of only the forward strand and is obtained using only one hash function
+// (gapped spaced index), then num_seeds_per_base = 1.
 int MinimizerIndex::MakeMinimizers_(uint128_t* seed_list, int64_t num_seeds, int64_t num_seeds_per_base, int32_t window_len) {
   if (window_len > num_seeds) { return 1; }
 
-  std::deque<int>  q(num_seeds_per_base*window_len);
+  std::deque<int> q(num_seeds_per_base*window_len);
 
   // Setup the initial deque.
-  for (int64_t i=0; i<window_len*num_seeds_per_base; i++) {
+  for (int64_t i=0; i<window_len*num_seeds_per_base && i<num_seeds; i++) {
     // Remove smaller elements if any.
     while ( (!q.empty()) && GET_KEY_FROM_HIT(seed_list[i]) <= GET_KEY_FROM_HIT(seed_list[q.back()])) {
       q.pop_back();
@@ -382,7 +386,8 @@ int MinimizerIndex::MakeMinimizers_(uint128_t* seed_list, int64_t num_seeds, int
   std::vector<int64_t> minimizer_indices;
   minimizer_indices.reserve(num_seeds);
 
-  // Every other seed is the reverse complement of the previous one.
+  // If num_seeds_per_base is e.g. equal to 2, then
+  // every other seed is potentially the reverse complement of the previous one.
   // Thus the sliding window will skip 2 instead of 1 seed.
   for (int64_t i=window_len*num_seeds_per_base; i<num_seeds; i+=num_seeds_per_base) {
     // Store the largest element of the previous window.
@@ -409,8 +414,7 @@ int MinimizerIndex::MakeMinimizers_(uint128_t* seed_list, int64_t num_seeds, int
   }
   for (int64_t i=0; i<num_seeds; i++) {
     if (keep[i] == false) {
-//      seed_list[i] = (seed_list[i] >> 64) << 64;
-      seed_list[i] = 0;
+      set_invalid_seed(seed_list[i]);
     }
   }
 
@@ -420,7 +424,8 @@ int MinimizerIndex::MakeMinimizers_(uint128_t* seed_list, int64_t num_seeds, int
 int MinimizerIndex::FlagDuplicates_(uint128_t* seed_list, int64_t num_seeds) const {
   for (int64_t i=1; i<num_seeds; i++) {
     if (seed_list[i-1] == seed_list[i]) {
-      seed_list[i-1] = 0;
+      set_invalid_seed(seed_list[i-1]);
+//      seed_list[i-1] = 0;
     }
   }
   return 0;
@@ -548,7 +553,7 @@ int MinimizerIndex::MakeSeedListDense_(uint128_t* seed_list, int64_t num_seeds) 
   int64_t offset = 0;
   int64_t i = 0;
   for (i=0; (i+offset)<num_seeds; i++) {
-    while ((i+offset) < num_seeds && GET_POS_FROM_HIT_WITH_REV(seed_list[i+offset]) == 0) {
+    while ((i+offset) < num_seeds && invalid_seed(seed_list[i+offset]) == true) {
       offset += 1;
     }
     if ((i+offset) < num_seeds) {

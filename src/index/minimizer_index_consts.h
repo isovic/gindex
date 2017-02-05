@@ -10,9 +10,11 @@
 
 #include <stdint.h>
 
-static const uint64_t empty_hash_key = 0xFFFFFFFFFFFFFFFF;
-
 typedef unsigned __int128 uint128_t;
+
+constexpr uint128_t kInvalidSeed = ((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) || (((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) << 64); // (uint128_t) 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+
+static const uint64_t empty_hash_key = 0xFFFFFFFFFFFFFFFF;
 const uint64_t kIndexIdReverse128 = ((uint128_t) 1) << 31;
 const uint64_t kIndexIdReverse64 = ((uint64_t) 1) << 31;
 const uint64_t kIndexMaskStrand64 = ~((uint64_t) kIndexIdReverse64);
