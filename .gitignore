@@ -24,4 +24,9 @@ dump*
 !test-data/simple/test2.fa 
 
 !test*.cc
+!test*.cpp
 !test*.h
+!temp*.cc
+!temp*.h
+!temp*.cpp
+!temp*.hpp
