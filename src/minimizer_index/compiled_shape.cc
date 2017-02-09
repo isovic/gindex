@@ -38,6 +38,11 @@ void CompiledShape::Compile(const std::string new_shape) {
     mask.len = 0;
   }
 
+  max_width_ = 0;
+  for (int32_t i = 0; i < new_shape.size(); i++) {
+    max_width_ += ((new_shape[i] == '1') ? 1 : 2);  /// '0' can also mean an insertion, so it can occupy two bases instead of one.
+  }
+
 //    shape = "11110111101111";
 //    Mask mask;
 //    mask.start = 0; mask.len = 4*2; masks.push_back(mask);

@@ -23,7 +23,7 @@ struct Mask {
 
 class CompiledShape {
  public:
-  CompiledShape() { };
+  CompiledShape() : num_incl_bits_(0), max_width_(0) { };
   CompiledShape(const std::string new_shape) { Compile(new_shape); };
 
   /* Creates a compiled shape for a given string description of the shape.
@@ -50,10 +50,15 @@ class CompiledShape {
     return shape_;
   }
 
+  const int32_t max_width() const {
+    return max_width_;
+  }
+
  private:
   std::vector<Mask> masks_;
-  std::string shape_ = "";
-  int32_t num_incl_bits_ = 0;
+  std::string shape_;
+  int32_t num_incl_bits_;
+  int32_t max_width_;
 };
 
 std::vector<CompiledShape> CompileShapes(const std::vector<std::string> &shapes);

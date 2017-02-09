@@ -12,7 +12,13 @@
 
 typedef unsigned __int128 uint128_t;
 
-constexpr uint128_t kInvalidSeed = ((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) || (((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) << 64); // (uint128_t) 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF;
+constexpr uint128_t kInvalidSeed = ((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) || (((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) << 64);
+constexpr uint128_t kSeedMaskLow64 = ((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF);
+constexpr uint128_t kSeedMaskHigh64 = (((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) << 64);
+constexpr uint128_t kSeedMaskPos = ((uint128_t) 0x000000000000000000000000FFFFFFFF);
+constexpr uint128_t kSeedMaskSeqId = ((uint128_t) 0x0000000000000000FFFFFFFF00000000);
+
+
 
 static const uint64_t empty_hash_key = 0xFFFFFFFFFFFFFFFF;
 const uint64_t kIndexIdReverse128 = ((uint128_t) 1) << 31;

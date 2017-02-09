@@ -48,27 +48,66 @@ typedef dense_hash_map<uint64_t, SeedHashValue, std::hash<uint64_t> > SeedHashTy
 
 /** A factory function for Minimizer Index. Uses a default seed hash function.
  */
-std::shared_ptr<MinimizerIndex> createMinimizerIndex();
+std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes);
 
 class MinimizerIndex {
  public:
-  friend std::shared_ptr<MinimizerIndex> createMinimizerIndex();
+  friend std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes);
 
   ~MinimizerIndex();
 
-  int Create(const SequenceFile &seqs, const std::vector<std::string> &shapes,
+  int Create(const SequenceFile &seqs,
              float min_avg_seed_qv, bool index_reverse_strand,
              bool use_minimizers, int32_t minimizer_window_len,
-             int32_t num_threads);
+             int32_t num_threads, bool verbose=false);
 
-  int GetHits(uint64_t seed_key, uint128_t **seeds, int64_t *num_seeds) const;
+  void CollectSeeds(const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+                    float min_avg_seed_q, bool index_reverse_strand,
+                    std::vector<uint128_t> &seed_list) const;
 
-  static void CollectMinimizers(
-      const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
-      float min_avg_seed_qv, uint64_t seq_id_fwd, uint64_t seq_id_rev,
-      const std::vector<CompiledShape> &compiled_shapes,
-      int64_t minimizer_window_len, std::vector<uint128_t> &seed_list,
-      int64_t *num_minimizers);
+  /* For a given C-style seed, all lookup keys are compiled from lookup shapes, and queried.
+   * Results are given as a vector of pointers to the corresponding hash buckets. This is done
+   * in order to prevent potential copying of a large number of hits (for performance purposes).
+   */
+  int Find(const int8_t* seed, int32_t seed_len, std::vector<const uint128_t *> &hits, std::vector<int64_t> &num_hits) const;
+
+  /* For a given C-style seed, all lookup keys are compiled from lookup shapes, and queried.
+   * All hits are copied to a new vector (unlike the alternative Find function) and self contained.
+   */
+  int FindAndJoin(const int8_t* seed, int32_t seed_len, std::vector<uint128_t> &hits) const;
+
+  /* For a given seed, calculate keys for all lookup shapes.
+   */
+  void CalcKeysFromSeed(const int8_t *seed, int32_t seed_len, std::vector<uint64_t> &keys) const;
+
+  /* Looks up all hits for a specific, calculated keys.
+   */
+  int KeyLookup(uint64_t seed_key, const uint128_t **seeds, int64_t *num_seeds) const;
+
+  /* Extract the position from a packed seed.
+   */
+  static inline int32_t seed_position(uint128_t seed) {
+    return (int32_t) ((seed & kSeedMaskPos));
+  }
+
+  /* Extract the sequence ID from a packed seed.
+   */
+  static inline int32_t seed_seq_id(uint128_t seed) {
+    return (int32_t) ((seed & kSeedMaskSeqId) >> 32);
+  }
+
+  /* Extract the key from a packed seed.
+   */
+  static inline int64_t seed_key(uint128_t seed) {
+    return (int64_t) ((seed >> 64));
+  }
+
+  /* Create a packed seed from the three components.
+   */
+  static inline uint128_t make_seed(uint64_t key, uint64_t seq_id, uint64_t position) {
+    return (((uint128_t) key) << 64) | (((uint128_t) seq_id) << 32)
+        | (((uint128_t) position) << 0);
+  }
 
   /* A debug function which writes the hash to a file on disk.
    * @out_path Path to a file on disk where data will be written to.
@@ -80,12 +119,78 @@ class MinimizerIndex {
   void DumpHashSortedByName(std::string out_path, int32_t num_bases);
   void DumpSeeds(std::string out_path, int32_t num_bases);
 
+
+  /* Returns a pointer to the serialized data of all sequences making
+   * up the index.
+   */
+  const std::vector<int8_t>& get_data() const {
+    return data_serialized_;
+  }
+
+  const std::vector<std::string>& get_headers() const {
+    return headers_;
+  }
+
+  const std::vector<int64_t>& get_reference_lengths() const {
+    return reference_lengths_;
+  }
+
+  int64_t get_num_sequences_forward() const {
+    return num_sequences_forward_;
+  }
+
+  int64_t get_num_sequences() const {
+    return num_sequences_;
+  }
+
+  int64_t get_data_length() const {
+    return data_length_;
+  }
+
+  int64_t get_data_length_forward() const {
+    return data_length_forward_;
+  }
+
+  int64_t get_shape_max_width() const {
+    return shape_max_width_;
+  }
+
+  const std::vector<int64_t>& get_reference_starting_pos() const {
+    return reference_starting_pos_;
+  }
+
+  const std::vector<CompiledShape>& get_index_shapes() const {
+    return index_shapes_;
+  }
+
+  const std::vector<CompiledShape>& get_lookup_shapes() const {
+    return lookup_shapes_;
+  }
+
+  ///////////////////////////////////////////////
+  /// Legacy support. Needs updating.
+  /// Also, needs implementing.
+  int64_t RawPositionConverterWithRefId(int64_t raw_position, int64_t reference_index, int64_t query_length, int64_t *ret_absolute_position=NULL, int64_t *ret_relative_position=NULL, SeqOrientation *ret_orientation=NULL, int64_t *ret_reference_index_with_reverse=NULL) const;
+  ///////////////////////////////////////////////
+
  private:
-  MinimizerIndex();  // Private constructor, prevent memory leaks.
-  MinimizerIndex(const MinimizerIndex&) = delete;        // No copy constructor.
+  MinimizerIndex(const std::vector<std::string> &shapes);           // Private constructor, prevent memory leaks.
+  MinimizerIndex(const MinimizerIndex&) = delete;                   // No copy constructor.
   const MinimizerIndex& operator=(const MinimizerIndex&) = delete;  // No assignment operator.
 
   void Clear_();             // Clears internal storage when creating the index.
+
+  /* Calculates some info on input indexing shapes, such as the maximum seed len, maximum number of inclusive bits
+   * (2-bit packed format) and the maximum width of a shape (should all don't care bases be replaced with the
+   * potential maximum of 2 bases).
+   */
+  void CalcShapeStats_(const std::vector<CompiledShape>& index_shapes, int64_t &max_seed_len, int32_t &max_incl_bits, int32_t &shape_max_width) const;
+
+  /* Create shapes which will be used for lookup.
+   * For every '0' base create 3 combinations: (mis)match, insertion, deletion.
+   */
+  std::vector<CompiledShape> CreateCompiledLookupShapes_(const std::vector<CompiledShape> &index_shapes);
+
   void AssignData_(const SequenceFile &seqs, bool index_reverse_strand);
   void AllocateSpaceForSeeds_(const SequenceFile &seqs,
                               bool index_reverse_strand, int64_t num_shapes,
@@ -93,12 +198,15 @@ class MinimizerIndex {
                               std::vector<int64_t> &seed_starts_for_seq,
                               int64_t *total_num_seeds);
 
-  static int CollectSeedsForSeq_(
+  static int CollectAllSeedsForSeq_(
       const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
-      float min_avg_seed_qv, uint64_t seq_id_fwd, uint64_t seq_id_rev,
+      float min_avg_seed_qv, bool index_reverse_strand,
+      uint64_t seq_id_fwd, uint64_t seq_id_rev,
       const std::vector<CompiledShape> &compiled_shapes,
       uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
+
   static inline uint64_t SeedHashFunctionDefault_(uint64_t seed, int32_t k);
+
   static inline uint64_t ReverseComplementSeed_(uint64_t seed,
                                                 int32_t num_bases);
   static int MakeMinimizers_(uint128_t *seed_list, int64_t num_seeds,
@@ -111,19 +219,54 @@ class MinimizerIndex {
                             double* ret_avg, double* ret_stddev,
                             double *ret_percentil_val) const;
 
+  /* Creates a vector of seeds for a given sequence. The seeds are packed in
+   * the uint128_t format, where the MSB 64 bits specify the key, next 32 bits
+   * the sequence ID and the 32 LSB bits the position of the seed on the sequence.
+   * If specified, the seeds will be minimized as well.
+   * @seqdata A C-style pointer to the raw sequence.
+   * @seqqual A pointer to the quality values of the sequence, if available. Can be NULL to ommit.
+   * @seqlen Length of the seqdata and seqqual arrays.
+   * @min_avg_seed_qv A seed will be skipped if the QV's of its bases are below this threshold.
+   * @seq_id_fwd The ID of the sequence in the forward direction. For example. Will be encoded in the seed.
+   * @seq_id_rev When indexing a sequence, fwd and rev are separately indexed. Fwd are usually indexed first, and rev after that, which means that rev will usually have ID of (seq_id_fwd + num_sequences_forward_.
+   * @seed_list A vector of all compiled seeds.
+   */
+  void CollectSeeds_(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
+                     bool index_reverse_strand, uint64_t seq_id_fwd, uint64_t seq_id_rev,
+                     int64_t max_seed_len, float min_avg_seed_qv, bool use_minimizers, int32_t minimizer_window_len,
+                     const std::vector<CompiledShape> &index_shapes, std::vector<uint128_t> &seed_list) const;
+
+
+
   std::vector<uint128_t> seeds_;            // A seed is encoded with: upper (MSB) 64 bits are the seed key, and lower (LSB) 64 bits are the ID of the sequence and the position (1-based, and encoded as in the IndexPos class). The position is 1-based to allow for undefined values.
   SeedHashType hash_;                       // A lookup for seeds by their key.
-  std::vector<std::vector<int8_t> > data_;  // Actual sequences which have been indexed. The outer vector contains both fwd and revcmp sequences (fwd come first).
+//  std::vector<std::vector<int8_t> > data_;  // Actual sequences which have been indexed. The outer vector contains both fwd and revcmp sequences (fwd come first).
+  double percentil_;                        // A value in range [0.0, 1.0] specifying the percentil of all seed occurrences to use as a cutoff threshold. E.g. percentil_ of 0.5 is a median.
 
-  int64_t num_sequences_;
-  int64_t num_sequences_forward_;
-  std::vector<int64_t> reference_lengths_;
-  std::vector<std::string> headers_;
+  ///////////////////////////////////////////////
+  /// Legacy support. Needs updating.
+  /// Also, needs implementing.
+  std::vector<int8_t> data_serialized_;             // TODO: remove data_ and replace with this!
+  std::vector<int64_t> reference_lengths_;          // Initialized by AssignData_(...). Values for reverse complements are initialized as well.
+  std::vector<std::string> headers_;                // Initialized by AssignData_(...). Headers for rev complements are initialized as well.
+  int64_t num_sequences_;                           // Initialized by AssignData_(...).
+  int64_t num_sequences_forward_;                   // Initialized by AssignData_(...).
+  int64_t data_length_;                             // Initialized by AssignData_(...).
+  int64_t data_length_forward_;                     // Initialized by AssignData_(...).
+  std::vector<int64_t> reference_starting_pos_;     // Initialized by AssignData_(...). Starting positions of each sequence in the serialized data_ array (absolute coordinates).
+  ///////////////////////////////////////////////
+
 //  // Seeds are extracted for each sequence separately, but are stored in a giant array. Each sequence 'i' is designated to belong to a part of that array, starting with seq_seed_starts_[i] position in seed_list_.
 //  std::vector<int64_t> seq_seed_starts_;
 //  std::vector<int64_t> seq_seed_counts_;
-  double count_cutoff_;
-  std::vector<CompiledShape> lookup_shapes_;
+  std::vector<CompiledShape> index_shapes_;     // Initialized by the constructor.
+  std::vector<CompiledShape> lookup_shapes_;    // Initialized by the constructor.
+  int64_t max_seed_len_;                        // Initialized by the constructor.
+  int32_t max_incl_bits_;                       // Initialized by the constructor.
+  int32_t shape_max_width_;                     // Initialized by the constructor.
+  bool use_minimizers_;                         // Initialized by Create(...).
+  int32_t minimizer_window_len_;                // Initialized by Create(...).
+  double count_cutoff_;                         // Initialized by Create(...).
 };
 
 /** Helper functions for debugging.
@@ -137,11 +280,6 @@ inline std::string SeedToString(uint64_t seed, int32_t num_bases) {
   std::string seed_string = ss.str();
   std::reverse(seed_string.begin(), seed_string.end());
   return seed_string;
-}
-
-inline uint128_t make_seed(uint64_t key, uint64_t seq_id, uint64_t position) {
-  return (((uint128_t) key) << 64) | (((uint128_t) seq_id) << 32)
-      | (((uint128_t) position) << 0);
 }
 
 inline bool invalid_seed(const uint128_t& seed) {
