@@ -20,7 +20,7 @@ std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::stri
   return std::shared_ptr<MinimizerIndex>(new MinimizerIndex(shapes));
 }
 
-MinimizerIndex::MinimizerIndex(const std::vector<std::string> &shapes) : percentil_(0.999) {
+MinimizerIndex::MinimizerIndex(const std::vector<std::string> &shapes) : percentil_(0.99) {
   hash_.set_empty_key(empty_hash_key);
 
   Clear_();
@@ -113,7 +113,7 @@ int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool
   for (int64_t i=0; i<seqs.get_sequences().size(); i++) {
     uint32_t thread_id = omp_get_thread_num();
     if (thread_id == 0 && verbose) {
-      LOG_ALL("\rRead %ld/%ld", (i + 1), seqs.get_sequences().size());
+      LOG_ALL("\rSequence %ld/%ld", (i + 1), seqs.get_sequences().size());
     }
 
     int8_t *seqdata = (int8_t *) seqs.get_sequences()[i]->get_data();
@@ -437,7 +437,7 @@ int MinimizerIndex::MakeMinimizers_(uint128_t* seed_list, int64_t num_seeds, int
   // Setup the initial deque.
   for (int64_t i=0; i<window_len*num_seeds_per_base && i<num_seeds; i++) {
     // Remove smaller elements if any.
-    while ( (!q.empty()) && GET_KEY_FROM_HIT(seed_list[i]) <= GET_KEY_FROM_HIT(seed_list[q.back()])) {
+    while ( (!q.empty()) && MinimizerIndex::seed_key(seed_list[i]) <= MinimizerIndex::seed_key(seed_list[q.back()])) {
       q.pop_back();
     }
     q.push_back(i);
@@ -457,7 +457,7 @@ int MinimizerIndex::MakeMinimizers_(uint128_t* seed_list, int64_t num_seeds, int
       q.pop_front();
     }
     // Remove smaller elements if any.
-    while ( (!q.empty()) && GET_KEY_FROM_HIT(seed_list[i]) <= GET_KEY_FROM_HIT(seed_list[q.back()])) {
+    while ( (!q.empty()) && MinimizerIndex::seed_key(seed_list[i]) <= MinimizerIndex::seed_key(seed_list[q.back()])) {
       q.pop_back();
     }
 
@@ -503,7 +503,7 @@ void MinimizerIndex::DumpHash(std::string out_path, int32_t num_bases) {
       fprintf (fp, "%s\t%ld\t%ld\t", key_string.c_str(), shv.start, shv.num);
 
       for (int64_t j=0; j<shv.num; j++) {
-        fprintf (fp, "%ld ", GET_REAL_POS_FROM_HIT(seeds_[shv.start + j]));
+        fprintf (fp, "%ld ", MinimizerIndex::seed_position(seeds_[shv.start + j]));
       }
       fprintf (fp, "\n");
     }
@@ -557,7 +557,7 @@ void MinimizerIndex::DumpSeeds(std::string out_path, int32_t num_bases) {
     for (int64_t i=0; i<seeds_.size(); i++) {
       uint64_t key = (uint64_t) (seeds_[i] >> 64);
       uint64_t coded_pos = seeds_[i] & 0x0000000000000000FFFFFFFFFFFFFFFF;
-      uint64_t ref_id = GET_SEQ_ID_FROM_HIT(seeds_[i]);
+      uint64_t ref_id = MinimizerIndex::seed_seq_id(seeds_[i]);
       IndexPos ipos(coded_pos);
   //    fprintf (fp, "%6X %ld\n", key, ipos.get_pos());
       std::string key_string = SeedToString(key, num_bases);
@@ -613,7 +613,7 @@ int MinimizerIndex::OccurrenceStatistics_(double percentil, int32_t num_threads,
   return 0;
 }
 
-int MinimizerIndex::MakeSeedListDense_(uint128_t* seed_list, int64_t num_seeds) {
+int64_t MinimizerIndex::MakeSeedListDense_(uint128_t* seed_list, int64_t num_seeds) {
   int64_t offset = 0;
   int64_t i = 0;
   for (i=0; (i+offset)<num_seeds; i++) {
@@ -715,7 +715,7 @@ int MinimizerIndex::KeyLookup(uint64_t seed_key, const uint128_t** seeds,
   return 0;
 }
 
-int MinimizerIndex::Find(const int8_t* seed, int32_t seed_len,
+int MinimizerIndex::Find(const int8_t* seed, int32_t seed_len, bool threshold_hits,
                          std::vector<const uint128_t*>& hits,
                          std::vector<int64_t> &num_hits) const {
 
@@ -731,8 +731,11 @@ int MinimizerIndex::Find(const int8_t* seed, int32_t seed_len,
 
     int lookup_ret = KeyLookup(key, &seeds, &num_seeds);
     if (!lookup_ret) {
-      hits.push_back(seeds);
-      num_hits.push_back(num_seeds);
+      // Filter seeds with excessive hits if necessary.
+      if (!threshold_hits || num_seeds < count_cutoff_) {
+        hits.push_back(seeds);
+        num_hits.push_back(num_seeds);
+      }
     }
   }
 
@@ -743,10 +746,10 @@ int MinimizerIndex::Find(const int8_t* seed, int32_t seed_len,
   return 0;
 }
 
-int MinimizerIndex::FindAndJoin(const int8_t* seed, int32_t seed_len, std::vector<uint128_t> &hits) const {
+int MinimizerIndex::FindAndJoin(const int8_t* seed, int32_t seed_len, bool threshold_hits, std::vector<uint128_t> &hits) const {
   std::vector<const uint128_t*> hits_ptr;
   std::vector<int64_t> num_hits_ptr;
-  Find(seed, seed_len, hits_ptr, num_hits_ptr);
+  Find(seed, seed_len, threshold_hits, hits_ptr, num_hits_ptr);
 
   hits.clear();
   int64_t total_hits = 0;

@@ -69,12 +69,12 @@ class MinimizerIndex {
    * Results are given as a vector of pointers to the corresponding hash buckets. This is done
    * in order to prevent potential copying of a large number of hits (for performance purposes).
    */
-  int Find(const int8_t* seed, int32_t seed_len, std::vector<const uint128_t *> &hits, std::vector<int64_t> &num_hits) const;
+  int Find(const int8_t* seed, int32_t seed_len, bool threshold_hits, std::vector<const uint128_t *> &hits, std::vector<int64_t> &num_hits) const;
 
   /* For a given C-style seed, all lookup keys are compiled from lookup shapes, and queried.
    * All hits are copied to a new vector (unlike the alternative Find function) and self contained.
    */
-  int FindAndJoin(const int8_t* seed, int32_t seed_len, std::vector<uint128_t> &hits) const;
+  int FindAndJoin(const int8_t* seed, int32_t seed_len, bool threshold_hits, std::vector<uint128_t> &hits) const;
 
   /* For a given seed, calculate keys for all lookup shapes.
    */
@@ -212,7 +212,7 @@ class MinimizerIndex {
   static int MakeMinimizers_(uint128_t *seed_list, int64_t num_seeds,
                              int64_t num_seeds_per_base, int32_t window_len);
   // Removes empty values, and shifts other seeds towards the top of the list.
-  static int MakeSeedListDense_(uint128_t *seed_list, int64_t num_seeds);
+  static int64_t MakeSeedListDense_(uint128_t *seed_list, int64_t num_seeds);
 
   int FlagDuplicates_(uint128_t *seed_list, int64_t num_seeds) const;
   int OccurrenceStatistics_(double percentil, int32_t num_threads,
