@@ -61,8 +61,14 @@ class MinimizerIndex {
              bool use_minimizers, int32_t minimizer_window_len,
              int32_t num_threads, bool verbose=false);
 
-  void CollectSeeds(const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+  void CollectIndexSeeds(const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
                     float min_avg_seed_q, bool index_reverse_strand,
+                    bool use_minimizers, int32_t minimizer_window_len,
+                    std::vector<uint128_t> &seed_list) const;
+
+  void CollectLookupSeeds(const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+                    float min_avg_seed_q, bool index_reverse_strand,
+                    bool use_minimizers, int32_t minimizer_window_len,
                     std::vector<uint128_t> &seed_list) const;
 
   /* For a given C-style seed, all lookup keys are compiled from lookup shapes, and queried.
@@ -167,6 +173,18 @@ class MinimizerIndex {
     return lookup_shapes_;
   }
 
+  double count_cutoff() const {
+    return count_cutoff_;
+  }
+
+  double avg_seed_occurrence() const {
+    return avg_seed_occurrence_;
+  }
+
+  int32_t max_incl_bases() const {
+    return max_incl_bases_;
+  }
+
   ///////////////////////////////////////////////
   /// Legacy support. Needs updating.
   /// Also, needs implementing.
@@ -184,7 +202,7 @@ class MinimizerIndex {
    * (2-bit packed format) and the maximum width of a shape (should all don't care bases be replaced with the
    * potential maximum of 2 bases).
    */
-  void CalcShapeStats_(const std::vector<CompiledShape>& index_shapes, int64_t &max_seed_len, int32_t &max_incl_bits, int32_t &shape_max_width) const;
+  void CalcShapeStats_(const std::vector<CompiledShape>& index_shapes, int64_t &max_seed_len, int32_t &max_incl_bits, int32_t &shape_max_width, int32_t &max_inclusive_bases) const;
 
   /* Create shapes which will be used for lookup.
    * For every '0' base create 3 combinations: (mis)match, insertion, deletion.
@@ -264,9 +282,11 @@ class MinimizerIndex {
   int64_t max_seed_len_;                        // Initialized by the constructor.
   int32_t max_incl_bits_;                       // Initialized by the constructor.
   int32_t shape_max_width_;                     // Initialized by the constructor.
+  int32_t max_incl_bases_;                 // Initialized by the constructor.
   bool use_minimizers_;                         // Initialized by Create(...).
   int32_t minimizer_window_len_;                // Initialized by Create(...).
   double count_cutoff_;                         // Initialized by Create(...).
+  double avg_seed_occurrence_;                  // Initialized by Create(...).
 };
 
 /** Helper functions for debugging.

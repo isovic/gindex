@@ -10,6 +10,7 @@
 
 #include <stdint.h>
 #include <string>
+#include <sstream>
 #include <vector>
 
 namespace is {
@@ -52,6 +53,18 @@ class CompiledShape {
 
   const int32_t max_width() const {
     return max_width_;
+  }
+
+  std::string Verbose() const {
+    std::stringstream ss;
+    ss << "shape = '" << shape_ << "'" << std::endl;
+    ss << "num_incl_bits = " << num_incl_bits_ << std::endl;
+    ss << "max_width = " << max_width_ << std::endl;
+    ss << "Masks:" << std::endl;
+    for (int32_t i=0; i<masks_.size(); i++) {
+      ss << "[mask " << i << "] start = " << masks_[i].start << ", len = " << masks_[i].len << ", bits = " << std::hex << masks_[i].bits << std::dec << ", shift = " << masks_[i].shift << std::endl;
+    }
+    return ss.str();
   }
 
  private:

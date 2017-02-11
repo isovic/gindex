@@ -27,7 +27,7 @@ MinimizerIndex::MinimizerIndex(const std::vector<std::string> &shapes) : percent
   // Compile the given shapes.
   index_shapes_ = CompileShapes(shapes);
   lookup_shapes_ = CreateCompiledLookupShapes_(index_shapes_);
-  CalcShapeStats_(index_shapes_, max_seed_len_, max_incl_bits_, shape_max_width_);
+  CalcShapeStats_(index_shapes_, max_seed_len_, max_incl_bits_, shape_max_width_, max_incl_bases_);
 }
 
 MinimizerIndex::~MinimizerIndex() {
@@ -65,10 +65,11 @@ std::vector<CompiledShape> MinimizerIndex::CreateCompiledLookupShapes_(const std
 
   std::vector<CompiledShape> lookup_shapes;
   lookup_shapes = CompileShapes(ls);
+
   return lookup_shapes;
 }
 
-void MinimizerIndex::CalcShapeStats_(const std::vector<CompiledShape>& index_shapes, int64_t &max_seed_len, int32_t &max_incl_bits, int32_t &shape_max_width) const {
+void MinimizerIndex::CalcShapeStats_(const std::vector<CompiledShape>& index_shapes, int64_t &max_seed_len, int32_t &max_incl_bits, int32_t &shape_max_width, int32_t &max_inclusive_bases) const {
   // Determine the maximum length of all shapes, to limit the last kmer being checked.
   max_seed_len = 0;
   max_incl_bits = 0;
@@ -78,6 +79,7 @@ void MinimizerIndex::CalcShapeStats_(const std::vector<CompiledShape>& index_sha
     max_incl_bits = std::max(max_incl_bits, index_shapes[i].num_incl_bits());
     shape_max_width  = std::max(shape_max_width, index_shapes[i].max_width());
   }
+  max_inclusive_bases = max_incl_bits / 2;
 }
 
 int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool index_reverse_strand, bool use_minimizers, int32_t minimizer_window_len, int32_t num_threads, bool verbose) {
@@ -211,6 +213,7 @@ int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool
   }
   OccurrenceStatistics_(percentil_, num_threads, &avg, &stddev, &percentil_value);
   count_cutoff_ = percentil_value;
+  avg_seed_occurrence_ = avg;
   if (verbose) {
     LOG_ALL("Index statistics: average key count = %f, std dev = %f, percentil(%.2f%%) = %f\n", avg, stddev, percentil_*100.0, percentil_value);
   }
@@ -287,6 +290,9 @@ void MinimizerIndex::AllocateSpaceForSeeds_(const SequenceFile& seqs, bool index
   seeds_.clear();
   seed_starts_for_seq.clear();
 
+  // This will hold the address for beginnings of the lists of seeds for each
+  // individual indexed sequence. All seeds are stored in the same giant array,
+  // but are virtually split like this.
   if (index_reverse_strand == true) {
     seed_starts_for_seq.resize(seqs.get_sequences().size() * 2);
   } else {
@@ -309,7 +315,7 @@ void MinimizerIndex::AllocateSpaceForSeeds_(const SequenceFile& seqs, bool index
   }
 
   /// The seed_list_will contain all seeds that were obtained from the input sequences.
-  seeds_.resize(*total_num_seeds);
+  seeds_.resize(*total_num_seeds, kInvalidSeed);
 }
 
 int MinimizerIndex::CollectAllSeedsForSeq_( const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
@@ -635,7 +641,11 @@ void MinimizerIndex::CollectSeeds_(const int8_t* seqdata, const int8_t* seqqual,
   int64_t num_seeds_fwd = (seqlen - max_seed_len + 1) * index_shapes.size();
 
   seed_list.clear();
-  seed_list.resize(num_seeds_fwd * 2);     // Allocate maximum space for the seeds. Factor 2 is for the reverse complement.
+  if (index_reverse_strand) {
+    seed_list.resize(num_seeds_fwd * 2, kInvalidSeed);     // Allocate maximum space for the seeds. Factor 2 is for the reverse complement.
+  } else {
+    seed_list.resize(num_seeds_fwd, kInvalidSeed);     // Allocate maximum space for the seeds. Factor 2 is for the reverse complement.
+  }
 
   int64_t num_seeds_processed = CollectAllSeedsForSeq_(seqdata, seqqual, seqlen, min_avg_seed_qv,
                                                        index_reverse_strand, seq_id_fwd, seq_id_rev, index_shapes, &(seed_list[0]), &(seed_list[num_seeds_fwd]));
@@ -647,7 +657,9 @@ void MinimizerIndex::CollectSeeds_(const int8_t* seqdata, const int8_t* seqqual,
       MakeMinimizers_(&(seed_list[num_seeds_fwd]), num_seeds_fwd, index_shapes.size(), minimizer_window_len);      // Reverse complement.
     }
 
+    LOG_DEBUG("seed_list.size() = %ld\n", seed_list.size());
     int64_t num_dense_seeds = MakeSeedListDense_(&(seed_list[0]), seed_list.size());
+    LOG_DEBUG("num_dense_seeds = %ld\n", num_dense_seeds);
     seed_list.resize(num_dense_seeds);
   }
 }
@@ -689,10 +701,18 @@ int64_t MinimizerIndex::RawPositionConverterWithRefId(int64_t raw_position, int6
   return reference_index;
 }
 
-void MinimizerIndex::CollectSeeds(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
+void MinimizerIndex::CollectIndexSeeds(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
                                   float min_avg_seed_qv, bool index_reverse_strand,
+                                  bool use_minimizers, int32_t minimizer_window_len,
                                   std::vector<uint128_t>& seed_list) const {
-  CollectSeeds_(seqdata, seqqual, seqlen, index_reverse_strand, 0, 0, max_seed_len_, min_avg_seed_qv, use_minimizers_, minimizer_window_len_, index_shapes_, seed_list);
+  CollectSeeds_(seqdata, seqqual, seqlen, index_reverse_strand, 0, 0, max_seed_len_, min_avg_seed_qv, use_minimizers, minimizer_window_len, index_shapes_, seed_list);
+}
+
+void MinimizerIndex::CollectLookupSeeds(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
+                                  float min_avg_seed_qv, bool index_reverse_strand,
+                                  bool use_minimizers, int32_t minimizer_window_len,
+                                  std::vector<uint128_t>& seed_list) const {
+  CollectSeeds_(seqdata, seqqual, seqlen, index_reverse_strand, 0, 0, max_seed_len_, min_avg_seed_qv, use_minimizers, minimizer_window_len, lookup_shapes_, seed_list);
 }
 
 std::string VerboseSeed(uint128_t seed) {
