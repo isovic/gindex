@@ -843,7 +843,7 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
     }
     new_header[string_length] = '\0';
     headers_.push_back(std::string(&new_header[0]));
-    LOG_DEBUG_MEDHIGH("\t  -> %s\n", headers_.back().c_str());
+//    LOG_DEBUG_MEDHIGH("\t  -> %s\n", headers_.back().c_str());
   }
 
   LOG_DEBUG_MEDHIGH("\t- Reference lengths\n");
