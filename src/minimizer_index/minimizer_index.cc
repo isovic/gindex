@@ -20,22 +20,38 @@ std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::stri
   return std::shared_ptr<MinimizerIndex>(new MinimizerIndex(shapes));
 }
 
+std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path) {
+  return std::shared_ptr<MinimizerIndex>(new MinimizerIndex(path));
+}
+
 MinimizerIndex::MinimizerIndex(const std::vector<std::string> &shapes) : percentil_(0.99) {
-  hash_.set_empty_key(empty_hash_key);
+  hash_.set_empty_key(empty_hash_key);      // Densehash requires this to be defined on top.
 
   Clear_();
-  // Compile the given shapes.
-  index_shapes_ = CompileShapes(shapes);
-  lookup_shapes_ = CreateCompiledLookupShapes_(index_shapes_);
-  CalcShapeStats_(index_shapes_, max_seed_len_, max_incl_bits_, shape_max_width_, max_incl_bases_);
+  InitializeShapes_(shapes);
+}
+
+MinimizerIndex::MinimizerIndex(const std::string& path) : percentil_(0.99) {
+  hash_.set_empty_key(empty_hash_key);      // Densehash requires this to be defined on top.
+
+  Load(path);
 }
 
 MinimizerIndex::~MinimizerIndex() {
   Clear_();
 }
 
+void MinimizerIndex::InitializeShapes_(const std::vector<std::string> &shapes) {
+  // Compile the given shapes.
+  index_shapes_ = CompileShapes(shapes);
+  lookup_shapes_ = CreateCompiledLookupShapes_(index_shapes_);
+  CalcShapeStats_(index_shapes_, max_seed_len_, max_incl_bits_, shape_max_width_, max_incl_bases_);
+}
+
 void MinimizerIndex::Clear_() {
   count_cutoff_ = 0.0;
+  stddev_seed_occurrence_ = 0.0;
+  avg_seed_occurrence_ = 0.0;
   num_sequences_ = 0;
   num_sequences_forward_ = 0;
   seeds_.clear();
@@ -155,9 +171,7 @@ int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool
 
   if (use_minimizers) {
     // Remove all excess seeds so that sorting will be faster.
-    if (verbose) {
-      LOG_ALL("Removing excess seeds.\n");
-    }
+    if (verbose) { LOG_ALL("Removing excess seeds.\n"); }
     int64_t num_dense_seeds = MakeSeedListDense_(&(seeds_[0]), seeds_.size());
     seeds_.resize(num_dense_seeds);
   }
@@ -180,12 +194,34 @@ int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool
 
   diff_time = clock();
 
+  ConstructHash_();
+
+  // Calculate a cutoff threshold as a percentil of the occurrence of a seed.
+  if (verbose) {
+    LOG_ALL("Calculating the distribution statistics for key counts (%.5f sec, diff: %.5f sec).\n", (((float) (clock() - absolute_time))/CLOCKS_PER_SEC), (((float) (clock() - diff_time))/CLOCKS_PER_SEC));
+  }
+
+  OccurrenceStatistics_(percentil_, num_threads, &avg_seed_occurrence_, &stddev_seed_occurrence_, &count_cutoff_);
+
+  if (verbose) {
+    LOG_ALL("Index statistics: average key count = %f, std dev = %f, percentil(%.2f%%) = %f\n", avg_seed_occurrence_, stddev_seed_occurrence_, percentil_*100.0, count_cutoff_);
+  }
+
+//  DumpSeeds("temp/seeds.csv", max_incl_bits_/2);
+//  DumpHash("temp/hash.csv", max_incl_bits_/2);
+//  DumpHashSortedByCount("temp/hash.minimizers.sorted.csv", max_incl_bits_/2);
+
+  return 0;
+}
+
+void MinimizerIndex::ConstructHash_() {
   // This part generates the lookup table for each seed key.
+  hash_.clear();
   uint64_t prev_key = 0;
   bool init = false;
   SeedHashValue new_hash_val;
   for (int64_t i=0; i<seeds_.size(); i++) {
-    uint64_t key = (uint64_t) (seeds_[i] >> 64);
+    uint64_t key = (uint64_t) MinimizerIndex::seed_key(seeds_[i]);
     if (init == false) {
       new_hash_val.start = i;
       new_hash_val.num = 1;
@@ -205,24 +241,6 @@ int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool
     new_hash_val.start = 0;
     new_hash_val.num = 0;
   }
-
-  // Calculate a cutoff threshold as a percentil of the occurrence of a seed.
-  double avg = 0.0f, stddev = 0.0f, percentil_value = 0.0f;
-  if (verbose) {
-    LOG_ALL("Calculating the distribution statistics for key counts (%.5f sec, diff: %.5f sec).\n", (((float) (clock() - absolute_time))/CLOCKS_PER_SEC), (((float) (clock() - diff_time))/CLOCKS_PER_SEC));
-  }
-  OccurrenceStatistics_(percentil_, num_threads, &avg, &stddev, &percentil_value);
-  count_cutoff_ = percentil_value;
-  avg_seed_occurrence_ = avg;
-  if (verbose) {
-    LOG_ALL("Index statistics: average key count = %f, std dev = %f, percentil(%.2f%%) = %f\n", avg, stddev, percentil_*100.0, percentil_value);
-  }
-
-//  DumpSeeds("temp/seeds.csv", max_incl_bits_/2);
-//  DumpHash("temp/hash.csv", max_incl_bits_/2);
-//  DumpHashSortedByCount("temp/hash.minimizers.sorted.csv", max_incl_bits_/2);
-
-  return 0;
 }
 
 void MinimizerIndex::AssignData_(const SequenceFile& seqs, bool index_reverse_strand) {
@@ -578,8 +596,10 @@ int MinimizerIndex::OccurrenceStatistics_(double percentil, int32_t num_threads,
 
   std::vector<int32_t> key_counts;
   key_counts.resize(hash_.size(), 0);
+
   int64_t currkey = 0;
   double avg = 0.0, stddev = 0.0, sum = 0.0;
+
   // Initialize the array of counts. Needed for percentil calculation.
   // Also, calculate the avg on the fly.
   for (auto it = hash_.begin(); it != hash_.end(); it++) {
@@ -599,18 +619,6 @@ int MinimizerIndex::OccurrenceStatistics_(double percentil, int32_t num_threads,
   // Calculate the percentil.
   pquickSort(&(key_counts[0]), key_counts.size(), num_threads);
   double perc_val = key_counts[percentil * (key_counts.size() - 1)];
-//  LOG_ALL("key_counts.size() = %ld\n", key_counts.size());
-//  LOG_ALL("Simple percentil (percentage of the total array): %f\n", perc_val);
-
-//  double perc_sum = 0.0;
-//  for (int64_t i=0; i<key_counts.size(); i++) {
-//    if ((perc_sum + key_counts[i]) >= (sum * percentil)) {
-//      perc_val = key_counts[i];
-//      break;
-//    }
-//    perc_sum += key_counts[i];
-//  }
-//  LOG_ALL("Weighted percentil (percentage of the total array): %f\n", perc_val);
 
   *ret_avg = avg;
   *ret_stddev = stddev;
@@ -631,6 +639,304 @@ int64_t MinimizerIndex::MakeSeedListDense_(uint128_t* seed_list, int64_t num_see
     }
   }
   return i;
+}
+
+int MinimizerIndex::Store(const std::string& path) {
+  LOG_DEBUG("Storing index to file '%s'.\n", path.c_str());
+
+  FILE *fp = fopen(path.c_str(), "wb");
+  if (fp == NULL) {
+    FATAL_REPORT(ERR_OPENING_FILE, "Path: '%s'", path.c_str());
+  }
+
+  int ret = Serialize_(fp);
+
+  fclose(fp);
+
+  LOG_DEBUG("Index stored.\n");
+
+  return ret;
+
+}
+
+int MinimizerIndex::Load(const std::string& path) {
+  LOG_DEBUG("Loading index from file '%s'.\n", path.c_str());
+
+  FILE *fp = fopen(path.c_str(), "rb");
+  if (fp == NULL) {
+    FATAL_REPORT(ERR_OPENING_FILE, "Path: '%s'", path.c_str());
+  }
+
+  int ret = Deserialize_(fp);
+
+  fclose(fp);
+
+  LOG_DEBUG("Index loaded.\n");
+
+  return ret;
+}
+
+int MinimizerIndex::Serialize_(FILE* fp) {
+  if (!fp) {
+    FATAL_REPORT(ERR_OPENING_FILE, "File not opened!\n");
+  }
+
+  LOG_DEBUG_MEDHIGH("Storing the index:\n");
+
+  ////////////////////////////////////////
+  /// Header of the index              ///
+  ////////////////////////////////////////
+  LOG_DEBUG_MEDHIGH("\t- Index header\n");
+
+  char out_designator[] = "VERSION ";
+  int64_t out_dlen = 1 * sizeof(int64_t);
+  fwrite(out_designator, sizeof(char), 8, fp);
+  fwrite(&out_dlen, sizeof(int64_t), 1, fp);
+  int64_t temp = MinimizerIndex::version_;
+  fwrite(&(temp), sizeof(int64_t), 1, fp);
+
+  ////////////////////////////////////////
+  /// Generic part of the index        ///
+  ////////////////////////////////////////
+  LOG_DEBUG_MEDHIGH("\t- Scalars (num_sequences_ = %ld, data_length_ = %ld)\n", num_sequences_, data_length_);
+
+  fwrite(&num_sequences_, sizeof(num_sequences_), 1, fp);
+  fwrite(&num_sequences_forward_, sizeof(num_sequences_forward_), 1, fp);
+
+  fwrite(&data_length_, sizeof(data_length_), 1, fp);
+  fwrite(&data_length_forward_, sizeof(data_length_forward_), 1, fp);
+
+  LOG_DEBUG_MEDHIGH("\t- Data\n");
+
+  fwrite(data_serialized_.data(), sizeof(int8_t), data_length_, fp);
+
+  LOG_DEBUG_MEDHIGH("\t- Headers\n");
+
+  for (uint64_t i=0; i<headers_.size(); i++) {
+    int64_t string_length = headers_[i].size();
+    fwrite(&string_length, sizeof(string_length), 1, fp);
+    fwrite(headers_[i].c_str(), sizeof(char), string_length, fp);
+  }
+
+  LOG_DEBUG_MEDHIGH("\t- Sequence starting positions and lengths\n");
+
+  fwrite((reference_starting_pos_.data()), sizeof(int64_t), reference_starting_pos_.size(), fp);
+
+  fwrite((reference_lengths_.data()), sizeof(int64_t), reference_lengths_.size(), fp);
+
+  ////////////////////////////////////////
+  /// Index part of the index          ///
+  ////////////////////////////////////////
+  // The seeds. Hash table will have to be rebuilt.
+  LOG_DEBUG_MEDHIGH("\t- Seeds (seeds_size = %ld)\n", seeds_.size());
+  int64_t seeds_size = seeds_.size();
+  fwrite(&seeds_size, sizeof(seeds_size), 1, fp);
+  fwrite((seeds_.data()), sizeof(uint128_t), seeds_size, fp);
+
+  // Scalar values.
+  LOG_DEBUG_MEDHIGH("\t- Scalars\n");
+  fwrite(&use_minimizers_, sizeof(use_minimizers_), 1, fp);
+  fwrite(&minimizer_window_len_, sizeof(minimizer_window_len_), 1, fp);
+  fwrite(&percentil_, sizeof(percentil_), 1, fp);
+
+  fwrite(&count_cutoff_, sizeof(count_cutoff_), 1, fp);
+  fwrite(&avg_seed_occurrence_, sizeof(avg_seed_occurrence_), 1, fp);
+  fwrite(&stddev_seed_occurrence_, sizeof(stddev_seed_occurrence_), 1, fp);
+
+  // Store the indexing shapes as strings.
+  // They can easily be rebuilt from that.
+  LOG_DEBUG_MEDHIGH("\t- Index shapes\n");
+  int64_t index_shapes_size = index_shapes_.size();
+  fwrite(&index_shapes_size, sizeof(index_shapes_size), 1, fp);
+  for (int32_t i=0; i<index_shapes_.size(); i++) {
+    int64_t string_length = index_shapes_[i].shape().size();
+    fwrite(&string_length, sizeof(string_length), 1, fp);
+    fwrite(index_shapes_[i].shape().c_str(), sizeof(char), string_length, fp);
+  }
+
+  LOG_DEBUG_MEDHIGH("...done!\n");
+
+  return 0;
+}
+
+int MinimizerIndex::Deserialize_(FILE* fp) {
+  if (!fp) {
+    FATAL_REPORT(ERR_OPENING_FILE, "File not opened!\n");
+  }
+
+  LOG_DEBUG_MEDHIGH("Deserializing the index...\n");
+
+  ///////////////////////////////////////////////
+  /// Load the header                         ///
+  ///////////////////////////////////////////////
+  LOG_DEBUG_MEDHIGH("\t- Loading the header\n");
+  char file_header[9];
+  if (fread(file_header, sizeof(char), 8, fp) != 8) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable file_header.");
+  }
+  file_header[8] = '\0';
+
+  // Meant for future updates to the format. For now, the first 8 bytes
+  // should spell out "VERSION", followed by the version number.
+  if (std::string(file_header) != std::string("VERSION ")) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Header error!\n");
+  }
+
+  int64_t dlen = 0;
+  if (fread(&dlen, sizeof(int64_t), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable dlen.");
+  }
+
+  int64_t version_number = 0;
+  if (fread(&version_number, sizeof(int64_t), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable version_number.");
+    return 3;
+  }
+
+  ///////////////////////////////////////////////
+  /// Important check - the index version     ///
+  ///////////////////////////////////////////////
+  LOG_DEBUG_MEDHIGH("\t- Checking the index version\n");
+  if (version_number < version_) {
+    FATAL_REPORT(ERR_FILE_DEFORMED_FORMAT, "Index version is older than expected (file version: %ld, required: %ld). Please rebuild the index.", version_number, MinimizerIndex::version_);
+  }
+
+  ///////////////////////////////////////////////
+  /// Load the generic part of the index.     ///
+  ///////////////////////////////////////////////
+  LOG_DEBUG_MEDHIGH("\t- Loading scalars\n");
+
+  if (fread(&num_sequences_, sizeof(num_sequences_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable num_sequences_.");
+  }
+
+  if (fread(&num_sequences_forward_, sizeof(num_sequences_forward_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable num_sequences_forward_.");
+  }
+
+  if (fread(&data_length_, sizeof(data_length_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable data_length_.");
+  }
+
+  if (fread(&data_length_forward_, sizeof(data_length_forward_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable data_length_forward_.");
+  }
+
+
+  LOG_DEBUG_MEDHIGH("\t- Data (num_sequences_ = %ld, data_length_ = %ld)\n", num_sequences_, data_length_);
+
+  data_serialized_.resize(data_length_);
+  if (fread(&data_serialized_[0], sizeof(int8_t), data_length_, fp) != data_length_) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable data_serialized_.");
+  }
+
+  LOG_DEBUG_MEDHIGH("\t- Headers\n");
+
+  headers_.clear();
+  for (int64_t i=0; i<num_sequences_; i++) {
+    int64_t string_length = 0;
+    if (fread(&string_length, sizeof(string_length), 1, fp) != 1) {
+      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable string_length.");
+    }
+
+    std::vector<char> new_header(string_length + 1, '\0');
+    if (fread(&new_header[0], sizeof(char), string_length, fp) != string_length) {
+      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable new_header.");
+    }
+    new_header[string_length] = '\0';
+    headers_.push_back(std::string(&new_header[0]));
+    LOG_DEBUG_MEDHIGH("\t  -> %s\n", headers_.back().c_str());
+  }
+
+  LOG_DEBUG_MEDHIGH("\t- Reference lengths\n");
+
+  reference_starting_pos_.resize(num_sequences_);
+  if (fread(&reference_starting_pos_[0], sizeof(int64_t), num_sequences_, fp) != num_sequences_) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable reference_starting_pos_.");
+  }
+
+  reference_lengths_.resize(num_sequences_);
+  if (fread(&reference_lengths_[0], sizeof(int64_t), num_sequences_, fp) != num_sequences_) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable reference_lengths_.");
+  }
+
+  ////////////////////////////////////////
+  /// Index part of the index          ///
+  ////////////////////////////////////////
+  int64_t seeds_len = 0;
+  if (fread(&seeds_len, sizeof(seeds_len), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable seeds_len.");
+  }
+
+  LOG_DEBUG_MEDHIGH("\t- Loading seeds (size: %ld)\n", seeds_len);
+
+  seeds_.resize(seeds_len);
+  if (fread(&seeds_[0], sizeof(uint128_t), seeds_len, fp) != seeds_len) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable seeds_.");
+  }
+
+  LOG_DEBUG_MEDHIGH("\t- Loading scalar values\n");
+
+  // Scalar values.
+  if (fread(&use_minimizers_, sizeof(use_minimizers_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable use_minimizers_.");
+  }
+
+  if (fread(&minimizer_window_len_, sizeof(minimizer_window_len_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable minimizer_window_len_.");
+  }
+
+  if (fread(&percentil_, sizeof(percentil_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable percentil_.");
+  }
+
+  if (fread(&count_cutoff_, sizeof(count_cutoff_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable count_cutoff_.");
+  }
+
+  if (fread(&avg_seed_occurrence_, sizeof(avg_seed_occurrence_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable avg_seed_occurrence_.");
+  }
+
+  if (fread(&stddev_seed_occurrence_, sizeof(stddev_seed_occurrence_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable stddev_seed_occurrence_.");
+  }
+
+  // Load the indexing shapes as strings.
+  // They can easily be rebuilt from that.
+  LOG_DEBUG_MEDHIGH("\t- Loading index shapes\n");
+  int64_t num_index_shapes = 0;
+  if (fread(&num_index_shapes, sizeof(num_index_shapes), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable num_index_shapes.");
+  }
+  std::vector<std::string> index_shapes;
+  for (int64_t i=0; i<num_index_shapes; i++) {
+    int64_t string_length = 0;
+    if (fread(&string_length, sizeof(string_length), 1, fp) != 1) {
+      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable string_length.");
+    }
+
+    std::vector<char> new_string(string_length + 1, '\0');
+    if (fread(&new_string[0], sizeof(char), string_length, fp) != string_length) {
+      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable new_header.");
+    }
+    new_string[string_length] = '\0';
+    index_shapes.push_back(std::string(&new_string[0]));
+    LOG_DEBUG_MEDHIGH("\t  -> %s\n", index_shapes.back().c_str());
+  }
+
+  ////////////////////////////////////////
+  /// Construct the shapes and hash    ///
+  ////////////////////////////////////////
+  LOG_DEBUG_MEDHIGH("\t- Constructing shapes\n");
+  InitializeShapes_(index_shapes);
+
+  LOG_DEBUG_MEDHIGH("\t- Constructing the hash\n");
+  ConstructHash_();
+
+  LOG_DEBUG_MEDHIGH("...done!\n");
+
+  return 0;
 }
 
 void MinimizerIndex::CollectSeeds_(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
