@@ -347,6 +347,8 @@ inline void set_invalid_seed(uint128_t& seed) {
   seed = kInvalidSeed;
 }
 
+std::string PrintSeed(uint128_t seed);
+
 } /* Namespace is. */
 
 /** TODO:

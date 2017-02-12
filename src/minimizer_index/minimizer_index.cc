@@ -176,7 +176,7 @@ int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool
     seeds_.resize(num_dense_seeds);
   }
 
-//  DumpSeeds("temp/seeds.dense.minimizers.csv", max_incl_bits/2);
+  DumpSeeds("temp/seeds.dense.minimizers.csv", max_incl_bits_/2);
 
   if (verbose) {
     LOG_ALL("Sorting the seeds (%.5f sec, diff: %.5f sec).\n", (((float) (clock() - absolute_time))/CLOCKS_PER_SEC), (((float) (clock() - diff_time))/CLOCKS_PER_SEC));
@@ -579,13 +579,11 @@ void MinimizerIndex::DumpSeeds(std::string out_path, int32_t num_bases) {
   if (fp != NULL) {
     fprintf (fp, "Key\tPosition\tSeqID\tis_rev\tkey\n");
     for (int64_t i=0; i<seeds_.size(); i++) {
-      uint64_t key = (uint64_t) (seeds_[i] >> 64);
-      uint64_t coded_pos = seeds_[i] & 0x0000000000000000FFFFFFFFFFFFFFFF;
-      uint64_t ref_id = MinimizerIndex::seed_seq_id(seeds_[i]);
-      IndexPos ipos(coded_pos);
-  //    fprintf (fp, "%6X %ld\n", key, ipos.get_pos());
+      int64_t key = (uint64_t) (seeds_[i] >> 64);
+      int64_t ref_id = MinimizerIndex::seed_seq_id(seeds_[i]);
+      int64_t pos = MinimizerIndex::seed_position(seeds_[i]);
       std::string key_string = SeedToString(key, num_bases);
-      fprintf (fp, "%s %ld %ld %s %15ld\n", key_string.c_str(), ipos.get_pos(), ipos.seq_id, ((ipos.is_rev() == true) ? "r" : "f"), key);
+      fprintf (fp, "%s: %s %ld %ld %s %15ld\n", PrintSeed(seeds_[i]).c_str(), key_string.c_str(), pos, ref_id, ((ref_id > num_sequences_forward_) ? "r" : "f"), key);
     }
     fclose(fp);
   }
@@ -1111,6 +1109,14 @@ void MinimizerIndex::CalcKeysFromSeed(const int8_t* seed, int32_t seed_len,
     uint64_t seed = lookup_shapes_[i].CreateSeedFromShape(buffer);
     keys.push_back(seed);
   }
+}
+
+std::string PrintSeed(uint128_t seed) {
+  std::stringstream ss;
+
+  ss << (uint32_t) ((seed & kSeedMask32_4) >> 96) << " " << (uint32_t) ((seed & kSeedMask32_3) >> 64) << " " << (uint32_t) ((seed & kSeedMask32_2) >> 32) << " " << (uint32_t) ((seed & kSeedMask32_1));
+
+  return ss.str();
 }
 
 } /* Namespace is. */

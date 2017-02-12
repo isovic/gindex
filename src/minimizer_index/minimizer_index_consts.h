@@ -15,21 +15,22 @@ typedef unsigned __int128 uint128_t;
 constexpr uint128_t kSeedMaskLow64 = ((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF);
 constexpr uint128_t kSeedMaskHigh64 = (((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) << 64);
 constexpr uint128_t kInvalidSeed = kSeedMaskLow64 | kSeedMaskHigh64; //((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) | (((uint128_t) 0x0000000000000000FFFFFFFFFFFFFFFF) << 64);
-constexpr uint128_t kSeedMaskPos = ((uint128_t) 0x000000000000000000000000FFFFFFFF);
-constexpr uint128_t kSeedMaskSeqId = ((uint128_t) 0x0000000000000000FFFFFFFF00000000);
+
 constexpr uint128_t kSeedMask32_1 = ((uint128_t) 0x000000000000000000000000FFFFFFFF);
 constexpr uint128_t kSeedMask32_2 = kSeedMask32_1 << 32; // ((uint128_t) 0x0000000000000000FFFFFFFF00000000);
 constexpr uint128_t kSeedMask32_3 = kSeedMask32_1 << 64; // ((uint128_t) 0x00000000FFFFFFFF0000000000000000);
 constexpr uint128_t kSeedMask32_4 = kSeedMask32_1 << 96; // ((uint128_t) 0xFFFFFFFF000000000000000000000000);
 
+constexpr uint128_t kSeedMaskPos = kSeedMask32_1;   // ((uint128_t) 0x000000000000000000000000FFFFFFFF);
+constexpr uint128_t kSeedMaskSeqId = kSeedMask32_2; // ((uint128_t) 0x0000000000000000FFFFFFFF00000000);
 
 
 static const uint64_t empty_hash_key = 0x7FFFFFFFFFFFFFFF;
-const uint64_t kIndexIdReverse128 = ((uint128_t) 1) << 31;
-const uint64_t kIndexIdReverse64 = ((uint64_t) 1) << 31;
-const uint64_t kIndexMaskStrand64 = ~((uint64_t) kIndexIdReverse64);
-const uint64_t kIndexMaskLowerBits64 = 0x00000000FFFFFFFF;
-const uint64_t kIndexMaskUpperBits64 = 0xFFFFFFFF00000000;
+//const uint64_t kIndexIdReverse128 = ((uint128_t) 1) << 31;
+//const uint64_t kIndexIdReverse64 = ((uint64_t) 1) << 31;
+//const uint64_t kIndexMaskStrand64 = ~((uint64_t) kIndexIdReverse64);
+//const uint64_t kIndexMaskLowerBits64 = 0x00000000FFFFFFFF;
+//const uint64_t kIndexMaskUpperBits64 = 0xFFFFFFFF00000000;
 
 //#define MAKE_HIT(key64, seqid32, pos32) ((((uint128_t) key64) << 64) | (((uint128_t) seqid32) << 32) | ((uint128_t) pos32))
 //#define GET_KEY_FROM_HIT(x)  ((uint64_t) ((x) >> 64))

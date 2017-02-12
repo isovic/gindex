@@ -27,8 +27,8 @@ class IndexPos {
     seq_id = coded_pos >> 32;
     pos = coded_pos & (0x00000000FFFFFFFF);
   }
-  bool is_rev() { return (pos & (kIndexIdReverse64)) != 0; }
-  inline uint32_t get_pos() { return (pos & kIndexMaskStrand64); }
+//  bool is_rev() { return (pos & (kIndexIdReverse64)) != 0; }
+//  inline uint32_t get_pos() { return (pos & kIndexMaskStrand64); }
   inline uint32_t get_seq_id() { return seq_id; }
   static uint64_t CodePos(uint32_t ref_id, uint32_t pos, bool reverse) {
     return (((uint64_t) ref_id) << 32) | ((uint64_t) pos);
