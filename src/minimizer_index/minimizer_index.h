@@ -48,16 +48,16 @@ typedef dense_hash_map<uint64_t, SeedHashValue, std::hash<uint64_t> > SeedHashTy
 
 /** A factory function for Minimizer Index. Uses a default seed hash function.
  */
-std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes);
+std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes, double freq_percentil);
 
 /** A factory function for Minimizer Index. Loads the index from a given path.
  */
-std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path);
+std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path, double freq_percentil);
 
 class MinimizerIndex {
  public:
-  friend std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes);
-  friend std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path);
+  friend std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shape, double freq_percentils);
+  friend std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path, double freq_percentil);
 
   ~MinimizerIndex();
 
@@ -209,8 +209,8 @@ class MinimizerIndex {
   ///////////////////////////////////////////////
 
  private:
-  explicit MinimizerIndex(const std::vector<std::string> &shapes);           // Private constructor, prevent memory leaks. Initializes an empty index for a given set of index shapes.
-  explicit MinimizerIndex(const std::string& path);                          // Private constructor, prevent memory leaks. Loads the index from file.
+  explicit MinimizerIndex(const std::vector<std::string> &shapes, double freq_percentil);           // Private constructor, prevent memory leaks. Initializes an empty index for a given set of index shapes.
+  explicit MinimizerIndex(const std::string& path, double freq_percentil);                          // Private constructor, prevent memory leaks. Loads the index from file.
   MinimizerIndex(const MinimizerIndex&) = delete;                   // No copy constructor.
   const MinimizerIndex& operator=(const MinimizerIndex&) = delete;  // No assignment operator.
 

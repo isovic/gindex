@@ -16,22 +16,22 @@
 
 namespace is {
 
-std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes) {
-  return std::shared_ptr<MinimizerIndex>(new MinimizerIndex(shapes));
+std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes, double freq_percentil) {
+  return std::shared_ptr<MinimizerIndex>(new MinimizerIndex(shapes, freq_percentil));
 }
 
-std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path) {
-  return std::shared_ptr<MinimizerIndex>(new MinimizerIndex(path));
+std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path, double freq_percentil) {
+  return std::shared_ptr<MinimizerIndex>(new MinimizerIndex(path, freq_percentil));
 }
 
-MinimizerIndex::MinimizerIndex(const std::vector<std::string> &shapes) : percentil_(0.99) {
+MinimizerIndex::MinimizerIndex(const std::vector<std::string> &shapes, double freq_percentil) : percentil_(freq_percentil) {
   hash_.set_empty_key(empty_hash_key);      // Densehash requires this to be defined on top.
 
   Clear_();
   InitializeShapes_(shapes);
 }
 
-MinimizerIndex::MinimizerIndex(const std::string& path) : percentil_(0.99) {
+MinimizerIndex::MinimizerIndex(const std::string& path, double freq_percentil) : percentil_(freq_percentil) {
   hash_.set_empty_key(empty_hash_key);      // Densehash requires this to be defined on top.
 
   Load(path);
@@ -614,9 +614,13 @@ int MinimizerIndex::OccurrenceStatistics_(double percentil, int32_t num_threads,
   if (key_counts.size() > 1) { stddev /= (key_counts.size() - 1); } // Unbiased estimator.
   stddev = sqrt(stddev);
 
-  // Calculate the percentil.
-  pquickSort(&(key_counts[0]), key_counts.size(), num_threads);
-  double perc_val = key_counts[percentil * (key_counts.size() - 1)];
+  double perc_val = 0.0;
+
+  if (key_counts.size() > 0) {
+    // Calculate the percentil.
+    pquickSort(&(key_counts[0]), key_counts.size(), num_threads);
+    perc_val = key_counts[percentil * (key_counts.size() - 1)];
+  }
 
   *ret_avg = avg;
   *ret_stddev = stddev;
@@ -884,9 +888,14 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
     FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable minimizer_window_len_.");
   }
 
-  if (fread(&percentil_, sizeof(percentil_), 1, fp) != 1) {
+  double temp_percentil = 0.0;
+  if (fread(&temp_percentil, sizeof(temp_percentil), 1, fp) != 1) {
     FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable percentil_.");
   }
+  if (temp_percentil != percentil_) {
+    LOG_ALL("WARNING: The seed hit frequency threshold used to build the index and the one provided via command line (or implicit default parameter values) mismatch! The loaded index uses frequency cutoff of %f, and the command line specifies %f. The loaded value will be used.\n", temp_percentil, percentil_);
+  }
+  percentil_ = temp_percentil;
 
   if (fread(&count_cutoff_, sizeof(count_cutoff_), 1, fp) != 1) {
     FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable count_cutoff_.");
