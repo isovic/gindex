@@ -198,6 +198,10 @@ class MinimizerIndex {
     return avg_seed_occurrence_;
   }
 
+  double max_seed_occurrence() const {
+    return max_seed_occurrence_;
+  }
+
   int32_t max_incl_bases() const {
     return max_incl_bases_;
   }
@@ -258,7 +262,7 @@ class MinimizerIndex {
 
   int FlagDuplicates_(uint128_t *seed_list, int64_t num_seeds) const;
   int OccurrenceStatistics_(double percentil, int32_t num_threads,
-                            double* ret_avg, double* ret_stddev,
+                            double* ret_avg, double *ret_max, double* ret_stddev,
                             double *ret_percentil_val) const;
 
   /* Creates a vector of seeds for a given sequence. The seeds are packed in
@@ -310,6 +314,7 @@ class MinimizerIndex {
   double count_cutoff_;                         // Initialized by Create(...).
   double avg_seed_occurrence_;                  // Initialized by Create(...).
   double stddev_seed_occurrence_;
+  double max_seed_occurrence_;
 
   // The following shape related values can all
   // be derived from index shapes in string form
@@ -323,7 +328,7 @@ class MinimizerIndex {
 
   ///////////////////////////////////////////////
   /// Constant values
-  static const int64_t version_ = 10;
+  static const int64_t version_ = 11;
 };
 
 /** Helper functions for debugging.

@@ -52,6 +52,7 @@ void MinimizerIndex::Clear_() {
   count_cutoff_ = 0.0;
   stddev_seed_occurrence_ = 0.0;
   avg_seed_occurrence_ = 0.0;
+  max_seed_occurrence_ = 0.0;
   num_sequences_ = 0;
   num_sequences_forward_ = 0;
   seeds_.clear();
@@ -201,10 +202,10 @@ int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool
     LOG_ALL("Calculating the distribution statistics for key counts (%.5f sec, diff: %.5f sec).\n", (((float) (clock() - absolute_time))/CLOCKS_PER_SEC), (((float) (clock() - diff_time))/CLOCKS_PER_SEC));
   }
 
-  OccurrenceStatistics_(percentil_, num_threads, &avg_seed_occurrence_, &stddev_seed_occurrence_, &count_cutoff_);
+  OccurrenceStatistics_(percentil_, num_threads, &avg_seed_occurrence_, &max_seed_occurrence_, &stddev_seed_occurrence_, &count_cutoff_);
 
   if (verbose) {
-    LOG_ALL("Index statistics: average key count = %f, std dev = %f, percentil(%.2f%%) = %f\n", avg_seed_occurrence_, stddev_seed_occurrence_, percentil_*100.0, count_cutoff_);
+    LOG_ALL("Index statistics: average key count = %f, max key count = %f, std dev = %f, percentil (%.2f%%) (count cutoff) = %f\n", avg_seed_occurrence_, max_seed_occurrence_, stddev_seed_occurrence_, percentil_*100.0, count_cutoff_);
   }
 
 //  DumpSeeds("temp/seeds.csv", max_incl_bits_/2);
@@ -589,14 +590,14 @@ void MinimizerIndex::DumpSeeds(std::string out_path, int32_t num_bases) {
   }
 }
 
-int MinimizerIndex::OccurrenceStatistics_(double percentil, int32_t num_threads, double* ret_avg, double* ret_stddev, double *ret_percentil_val) const {
+int MinimizerIndex::OccurrenceStatistics_(double percentil, int32_t num_threads, double* ret_avg, double *ret_max, double* ret_stddev, double *ret_percentil_val) const {
   if (percentil < 0.0 || percentil > 1.0) { return 1; }
 
   std::vector<int32_t> key_counts;
   key_counts.resize(hash_.size(), 0);
 
   int64_t currkey = 0;
-  double avg = 0.0, stddev = 0.0, sum = 0.0;
+  double avg = 0.0, max = 0.0, stddev = 0.0, sum = 0.0;
 
   // Initialize the array of counts. Needed for percentil calculation.
   // Also, calculate the avg on the fly.
@@ -610,21 +611,26 @@ int MinimizerIndex::OccurrenceStatistics_(double percentil, int32_t num_threads,
   // Calculate the standard deviation.
   for (int64_t i=0; i<key_counts.size(); i++) {
     stddev += (key_counts[i] - avg) * (key_counts[i] - avg);
+    max = std::max(max, (double) key_counts[i]);
   }
   if (key_counts.size() > 1) { stddev /= (key_counts.size() - 1); } // Unbiased estimator.
   stddev = sqrt(stddev);
 
   double perc_val = 0.0;
-
   if (key_counts.size() > 0) {
     // Calculate the percentil.
     pquickSort(&(key_counts[0]), key_counts.size(), num_threads);
     perc_val = key_counts[percentil * (key_counts.size() - 1)];
   }
 
+//  printf ("percentil = %f\n", percentil);
+//  printf ("perc_val = %f\n", perc_val);
+//  fflush(stdout);
+
   *ret_avg = avg;
+  *ret_max = max;
   *ret_stddev = stddev;
-  *ret_percentil_val = perc_val;
+  *ret_percentil_val = std::max(perc_val + 1.0, 2.0);  // The +1 is to allow for the seeds at the percentil value to be found as wel. Max is to prevent non-repetitive sequences to become unmapped.
 
   return 0;
 }
@@ -743,6 +749,7 @@ int MinimizerIndex::Serialize_(FILE* fp) {
 
   fwrite(&count_cutoff_, sizeof(count_cutoff_), 1, fp);
   fwrite(&avg_seed_occurrence_, sizeof(avg_seed_occurrence_), 1, fp);
+  fwrite(&max_seed_occurrence_, sizeof(max_seed_occurrence_), 1, fp);
   fwrite(&stddev_seed_occurrence_, sizeof(stddev_seed_occurrence_), 1, fp);
 
   // Store the indexing shapes as strings.
@@ -902,6 +909,10 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
   }
 
   if (fread(&avg_seed_occurrence_, sizeof(avg_seed_occurrence_), 1, fp) != 1) {
+    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable avg_seed_occurrence_.");
+  }
+
+  if (fread(&max_seed_occurrence_, sizeof(max_seed_occurrence_), 1, fp) != 1) {
     FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable avg_seed_occurrence_.");
   }
 
