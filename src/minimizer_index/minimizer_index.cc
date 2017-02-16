@@ -177,7 +177,7 @@ int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool
     seeds_.resize(num_dense_seeds);
   }
 
-  DumpSeeds("temp/seeds.dense.minimizers.csv", max_incl_bits_/2);
+//  DumpSeeds("temp/seeds.dense.minimizers.csv", max_incl_bits_/2);
 
   if (verbose) {
     LOG_ALL("Sorting the seeds (%.5f sec, diff: %.5f sec).\n", (((float) (clock() - absolute_time))/CLOCKS_PER_SEC), (((float) (clock() - diff_time))/CLOCKS_PER_SEC));
@@ -207,6 +207,8 @@ int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool
   if (verbose) {
     LOG_ALL("Index statistics: average key count = %f, max key count = %f, std dev = %f, percentil (%.2f%%) (count cutoff) = %f\n", avg_seed_occurrence_, max_seed_occurrence_, stddev_seed_occurrence_, percentil_*100.0, count_cutoff_);
   }
+
+  ConstructHashUnderCutoff();
 
 //  DumpSeeds("temp/seeds.csv", max_incl_bits_/2);
 //  DumpHash("temp/hash.csv", max_incl_bits_/2);
@@ -950,11 +952,55 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
   InitializeShapes_(index_shapes);
 
   LOG_DEBUG_MEDHIGH("\t- Constructing the hash\n");
-  ConstructHash_();
+//  ConstructHash_();
+  ConstructHashUnderCutoff();
 
   LOG_DEBUG_MEDHIGH("...done!\n");
 
   return 0;
+}
+
+void MinimizerIndex::ConstructHashUnderCutoff(){
+  // This part generates the lookup table for each seed key.
+  printf ("count_cutoff_ = %f\n", count_cutoff_);
+  fflush(stdout);
+
+  hash_.clear();
+  uint64_t prev_key = 0;
+  bool init = false;
+  SeedHashValue new_hash_val;
+  for (int64_t i=0; i<seeds_.size(); i++) {
+    uint64_t key = (uint64_t) MinimizerIndex::seed_key(seeds_[i]);
+    if (init == false) {
+      new_hash_val.start = i;
+      new_hash_val.num = 1;
+      init = true;
+    } else if (key != prev_key && new_hash_val.num > 0) {
+      if (new_hash_val.num < count_cutoff_) {
+        hash_[prev_key] = new_hash_val;
+      }
+      new_hash_val.start = i;
+      new_hash_val.num = 1;
+    } else {
+      new_hash_val.num += 1;
+    }
+    prev_key = key;
+  }
+  // Store the last hash key in the list.
+  if (new_hash_val.num > 0) {
+    if (new_hash_val.num < count_cutoff_) {
+      hash_[prev_key] = new_hash_val;
+    }
+    new_hash_val.start = 0;
+    new_hash_val.num = 0;
+  }
+
+//  ConstructHash_
+//  for (auto it = hash_.begin(); it != hash_.end(); it++) {
+//    key_counts[currkey++] = it->second.num;
+//    avg += it->second.num;
+//    sum += it->second.num;
+//  }
 }
 
 void MinimizerIndex::CollectSeeds_(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
@@ -1076,10 +1122,10 @@ int MinimizerIndex::Find(const int8_t* seed, int32_t seed_len, bool threshold_hi
     int lookup_ret = KeyLookup(key, &seeds, &num_seeds);
     if (!lookup_ret) {
       // Filter seeds with excessive hits if necessary.
-      if (!threshold_hits || num_seeds < count_cutoff_) {
+//      if (!threshold_hits || num_seeds < count_cutoff_) {
         hits.push_back(seeds);
         num_hits.push_back(num_seeds);
-      }
+//      }
     }
   }
 

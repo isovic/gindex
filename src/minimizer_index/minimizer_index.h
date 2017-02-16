@@ -99,6 +99,8 @@ class MinimizerIndex {
    */
   int FindAndJoin(const int8_t* seed, int32_t seed_len, bool threshold_hits, std::vector<uint128_t> &hits) const;
 
+  void ConstructHashUnderCutoff();
+
   /* For a given seed, calculate keys for all lookup shapes.
    */
   void CalcKeysFromSeed(const int8_t *seed, int32_t seed_len, std::vector<uint64_t> &keys) const;
