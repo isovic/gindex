@@ -253,6 +253,20 @@ class MinimizerIndex {
       const std::vector<CompiledShape> &compiled_shapes,
       uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
 
+  static int CollectAllSeedsForSeqWithQual_(
+      const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+      float min_avg_seed_qv, bool index_reverse_strand,
+      uint64_t seq_id_fwd, uint64_t seq_id_rev,
+      const std::vector<CompiledShape> &compiled_shapes,
+      uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
+
+  static int CollectAllSeedsForSeqWithOutQual_(
+      const int8_t *seqdata, int64_t seqlen,
+      bool index_reverse_strand,
+      uint64_t seq_id_fwd, uint64_t seq_id_rev,
+      const std::vector<CompiledShape> &compiled_shapes,
+      uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
+
   static inline uint64_t SeedHashFunctionDefault_(uint64_t seed, int32_t k);
 
   static inline uint64_t ReverseComplementSeed_(uint64_t seed,
@@ -283,7 +297,6 @@ class MinimizerIndex {
                      bool index_reverse_strand, uint64_t seq_id_fwd, uint64_t seq_id_rev,
                      int64_t max_seed_len, float min_avg_seed_qv, bool use_minimizers, int32_t minimizer_window_len,
                      const std::vector<CompiledShape> &index_shapes, std::vector<uint128_t> &seed_list) const;
-
 
 
 

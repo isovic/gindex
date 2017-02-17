@@ -344,6 +344,105 @@ int MinimizerIndex::CollectAllSeedsForSeq_( const int8_t* seqdata, const int8_t*
                                             uint64_t seq_id_fwd, uint64_t seq_id_rev,
                                             const std::vector<CompiledShape>& compiled_shapes,
                                             uint128_t* seed_list_fwd, uint128_t* seed_list_rev) {
+
+  // Use separate implementations to avoid branching in the loop.
+  if (seqqual != NULL) {
+    return CollectAllSeedsForSeqWithQual_(seqdata, seqqual, seqlen, min_avg_seed_qv,
+                                   index_reverse_strand, seq_id_fwd, seq_id_rev,
+                                   compiled_shapes, seed_list_fwd, seed_list_rev);
+  } else {
+    return CollectAllSeedsForSeqWithOutQual_(seqdata, seqlen,
+                                   index_reverse_strand, seq_id_fwd, seq_id_rev,
+                                   compiled_shapes, seed_list_fwd, seed_list_rev);
+  }
+}
+
+
+
+int MinimizerIndex::CollectAllSeedsForSeqWithOutQual_( const int8_t* seqdata, int64_t seqlen,
+                                            bool index_reverse_strand,
+                                            uint64_t seq_id_fwd, uint64_t seq_id_rev,
+                                            const std::vector<CompiledShape>& compiled_shapes,
+                                            uint128_t* seed_list_fwd, uint128_t* seed_list_rev) {
+  int64_t max_seed_len = 0;
+  for (int32_t i=0; i<compiled_shapes.size(); i++) {
+    max_seed_len = std::max(max_seed_len, (int64_t) compiled_shapes[i].shape().size());
+  }
+
+  /// The seqdata will be split in parts separated by N bases (similar to DALIGNER).
+  /// Parts shorter than seed_len will be skipped.
+  std::vector<int64_t> split_start;
+  std::vector<int64_t> split_len;
+  int64_t start = 0;
+  for (int64_t i=0; i<seqlen; i++) {
+    if (kBaseToBwa[seqdata[i]] > 3 || (i+1) >= seqlen) {
+      int64_t current_len = ((i+1) >= seqlen) ? ((i - start) + 1) : (i - start);
+      if (current_len >= max_seed_len) {
+        split_start.push_back(start);
+        split_len.push_back(current_len);
+      }
+      start = i + 1;
+    }
+  }
+
+  int64_t seed_id = 0;
+
+  /// Iterate through all split regions.
+  for (int64_t i=0; i<split_start.size(); i++) {
+    /// We will use a buffer of 2-bit encoded bases, which will keep up to 32 bases at once.
+    /// Fill the buffer for gapped spaced seed making. Buffer holds the next 8 bytes of data (max. 32 bases).
+    /// Only seed_len bases are used, so the rest of the buffer is just to have the data ready.
+    uint64_t buffer = 0;
+    int64_t num_bases_ahead = sizeof(buffer) * 8 / 2;
+
+    for (uint64_t pos=0; pos<(split_len[i] - max_seed_len); pos++) {
+      /// Prepare the base-buffer. This would be an equivalent of a full-seed, including the
+      /// don't care bases. This buffer will be used to extract the gapped spaced seed.
+      /// Initialize the buffer.
+      if (pos == 0) {
+        for (int32_t j=0; j<num_bases_ahead && j<split_len[i]; j++) {
+          int8_t seqbase = kBaseToBwa[seqdata[j + split_start[i]]];
+          buffer |= (((uint64_t) seqbase) << (sizeof(buffer)*8 - j*2 - 2));
+        }
+      } else {  /// Else, shift the buffer and re-fill.
+        buffer = buffer << 2;
+        if ((pos + num_bases_ahead) < split_len[i]) {
+          int8_t seqbase = kBaseToBwa[seqdata[pos + split_start[i] + num_bases_ahead - 1]];
+          buffer |= (((uint64_t) seqbase) << (0));
+        }
+      }
+
+      /// Extract gapped spaced seeds from the buffer.
+      for (int64_t shape_id=0; shape_id<compiled_shapes.size(); shape_id++) {
+        auto num_inclusive_bases = compiled_shapes[shape_id].num_incl_bits()/2;
+
+        uint64_t seed = compiled_shapes[shape_id].CreateSeedFromShape(buffer);
+        uint64_t key = SeedHashFunctionDefault_(seed, num_inclusive_bases);
+        uint64_t position = pos + split_start[i]; // + 1;     // Make the position 1-based.
+        seed_list_fwd[seed_id] = make_seed(key, seq_id_fwd, position);
+//        seed_id += 1;
+
+        if (index_reverse_strand) {
+          uint64_t rev_seed = ReverseComplementSeed_(seed, num_inclusive_bases);
+          uint64_t rev_key = SeedHashFunctionDefault_(rev_seed, num_inclusive_bases);
+          uint64_t rev_position = (seqlen - position - 1); // | kIndexIdReverse64;
+          seed_list_rev[seed_id] = make_seed(rev_key, seq_id_rev, rev_position);
+        }
+
+        seed_id += 1;
+      }
+
+    }
+  }
+
+  return seed_id;
+}
+
+int MinimizerIndex::CollectAllSeedsForSeqWithQual_( const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
+                                            float min_avg_seed_qv, bool index_reverse_strand,
+                                            uint64_t seq_id_fwd, uint64_t seq_id_rev,
+                                            const std::vector<CompiledShape>& compiled_shapes,
+                                            uint128_t* seed_list_fwd, uint128_t* seed_list_rev) {
   int64_t max_seed_len = 0;
   for (int32_t i=0; i<compiled_shapes.size(); i++) {
     max_seed_len = std::max(max_seed_len, (int64_t) compiled_shapes[i].shape().size());
@@ -962,9 +1061,6 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
 
 void MinimizerIndex::ConstructHashUnderCutoff(){
   // This part generates the lookup table for each seed key.
-  printf ("count_cutoff_ = %f\n", count_cutoff_);
-  fflush(stdout);
-
   hash_.clear();
   uint64_t prev_key = 0;
   bool init = false;
@@ -994,13 +1090,6 @@ void MinimizerIndex::ConstructHashUnderCutoff(){
     new_hash_val.start = 0;
     new_hash_val.num = 0;
   }
-
-//  ConstructHash_
-//  for (auto it = hash_.begin(); it != hash_.end(); it++) {
-//    key_counts[currkey++] = it->second.num;
-//    avg += it->second.num;
-//    sum += it->second.num;
-//  }
 }
 
 void MinimizerIndex::CollectSeeds_(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
