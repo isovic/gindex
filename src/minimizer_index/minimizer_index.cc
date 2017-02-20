@@ -246,6 +246,39 @@ void MinimizerIndex::ConstructHash_() {
   }
 }
 
+void MinimizerIndex::ConstructHashUnderCutoff(){
+  // This part generates the lookup table for each seed key.
+  hash_.clear();
+  uint64_t prev_key = 0;
+  bool init = false;
+  SeedHashValue new_hash_val;
+  for (int64_t i=0; i<seeds_.size(); i++) {
+    uint64_t key = (uint64_t) MinimizerIndex::seed_key(seeds_[i]);
+    if (init == false) {
+      new_hash_val.start = i;
+      new_hash_val.num = 1;
+      init = true;
+    } else if (key != prev_key && new_hash_val.num > 0) {
+      if (new_hash_val.num < count_cutoff_) {
+        hash_[prev_key] = new_hash_val;
+      }
+      new_hash_val.start = i;
+      new_hash_val.num = 1;
+    } else {
+      new_hash_val.num += 1;
+    }
+    prev_key = key;
+  }
+  // Store the last hash key in the list.
+  if (new_hash_val.num > 0) {
+    if (new_hash_val.num < count_cutoff_) {
+      hash_[prev_key] = new_hash_val;
+    }
+    new_hash_val.start = 0;
+    new_hash_val.num = 0;
+  }
+}
+
 void MinimizerIndex::AssignData_(const SequenceFile& seqs, bool index_reverse_strand) {
   /// The array seq_seeds_starts will hold starting positions for seeds comming from
   /// individual reads. I.e. each read will get a part of seq_seeds_ array which it will
@@ -1057,39 +1090,6 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
   LOG_DEBUG_MEDHIGH("...done!\n");
 
   return 0;
-}
-
-void MinimizerIndex::ConstructHashUnderCutoff(){
-  // This part generates the lookup table for each seed key.
-  hash_.clear();
-  uint64_t prev_key = 0;
-  bool init = false;
-  SeedHashValue new_hash_val;
-  for (int64_t i=0; i<seeds_.size(); i++) {
-    uint64_t key = (uint64_t) MinimizerIndex::seed_key(seeds_[i]);
-    if (init == false) {
-      new_hash_val.start = i;
-      new_hash_val.num = 1;
-      init = true;
-    } else if (key != prev_key && new_hash_val.num > 0) {
-      if (new_hash_val.num < count_cutoff_) {
-        hash_[prev_key] = new_hash_val;
-      }
-      new_hash_val.start = i;
-      new_hash_val.num = 1;
-    } else {
-      new_hash_val.num += 1;
-    }
-    prev_key = key;
-  }
-  // Store the last hash key in the list.
-  if (new_hash_val.num > 0) {
-    if (new_hash_val.num < count_cutoff_) {
-      hash_[prev_key] = new_hash_val;
-    }
-    new_hash_val.start = 0;
-    new_hash_val.num = 0;
-  }
 }
 
 void MinimizerIndex::CollectSeeds_(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
