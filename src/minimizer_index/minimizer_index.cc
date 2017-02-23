@@ -806,14 +806,18 @@ int MinimizerIndex::Load(const std::string& path) {
 
   FILE *fp = fopen(path.c_str(), "rb");
   if (fp == NULL) {
-    FATAL_REPORT(ERR_OPENING_FILE, "Path: '%s'", path.c_str());
+//    FATAL_REPORT(ERR_OPENING_FILE, "Path: '%s'", path.c_str());
+    LOG_ALL("ERROR: Index file '%s' does not exist.\n", path.c_str());
+    return -1;
   }
 
   int ret = Deserialize_(fp);
 
   fclose(fp);
 
-  LOG_DEBUG("Index loaded.\n");
+  if (!ret) {
+    LOG_DEBUG("Index loaded.\n");
+  }
 
   return ret;
 }
@@ -922,17 +926,22 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
   // Meant for future updates to the format. For now, the first 8 bytes
   // should spell out "VERSION", followed by the version number.
   if (std::string(file_header) != std::string("VERSION ")) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Header error!\n");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Header error!\n");
+    LOG_ALL("Cannot load index from file: header error!\n");
+    return 3;
   }
 
   int64_t dlen = 0;
   if (fread(&dlen, sizeof(int64_t), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable dlen.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable dlen.");
+    LOG_ALL("Cannot load index from file: error reading dlen.\n");
+    return 3;
   }
 
   int64_t version_number = 0;
   if (fread(&version_number, sizeof(int64_t), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable version_number.");
+//    WARNING_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable version_number.");
+    LOG_ALL("Cannot load index from file: error reading version number.\n");
     return 3;
   }
 
@@ -941,7 +950,9 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
   ///////////////////////////////////////////////
   LOG_DEBUG_MEDHIGH("\t- Checking the index version\n");
   if (version_number < version_) {
-    FATAL_REPORT(ERR_FILE_DEFORMED_FORMAT, "Index version is older than expected (file version: %ld, required: %ld). Please rebuild the index.", version_number, MinimizerIndex::version_);
+//    FATAL_REPORT(ERR_FILE_DEFORMED_FORMAT, "Index version is older than expected (file version: %ld, required: %ld). Please rebuild the index.", version_number, MinimizerIndex::version_);
+    LOG_ALL("Cannot load index from file: wrong index version.\n");
+    return 4;
   }
 
   ///////////////////////////////////////////////
@@ -950,19 +961,25 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
   LOG_DEBUG_MEDHIGH("\t- Loading scalars\n");
 
   if (fread(&num_sequences_, sizeof(num_sequences_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable num_sequences_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable num_sequences_.");
+    LOG_ALL("Cannot load index from file: error reading num_sequences_.\n");
+    return 3;
   }
 
   if (fread(&num_sequences_forward_, sizeof(num_sequences_forward_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable num_sequences_forward_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable num_sequences_forward_.");
+    LOG_ALL("Cannot load index from file: error reading num_sequences_forward_.\n");
+    return 3;
   }
 
   if (fread(&data_length_, sizeof(data_length_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable data_length_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable data_length_.");
+    return 3;
   }
 
   if (fread(&data_length_forward_, sizeof(data_length_forward_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable data_length_forward_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable data_length_forward_.");
+    return 3;
   }
 
 
@@ -970,7 +987,8 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
 
   data_serialized_.resize(data_length_);
   if (fread(&data_serialized_[0], sizeof(int8_t), data_length_, fp) != data_length_) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable data_serialized_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable data_serialized_.");
+    return 3;
   }
 
   LOG_DEBUG_MEDHIGH("\t- Headers\n");
@@ -979,12 +997,14 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
   for (int64_t i=0; i<num_sequences_; i++) {
     int64_t string_length = 0;
     if (fread(&string_length, sizeof(string_length), 1, fp) != 1) {
-      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable string_length.");
+//      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable string_length.");
+      return 3;
     }
 
     std::vector<char> new_header(string_length + 1, '\0');
     if (fread(&new_header[0], sizeof(char), string_length, fp) != string_length) {
-      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable new_header.");
+//      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable new_header.");
+      return 3;
     }
     new_header[string_length] = '\0';
     headers_.push_back(std::string(&new_header[0]));
@@ -995,12 +1015,14 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
 
   reference_starting_pos_.resize(num_sequences_);
   if (fread(&reference_starting_pos_[0], sizeof(int64_t), num_sequences_, fp) != num_sequences_) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable reference_starting_pos_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable reference_starting_pos_.");
+    return 3;
   }
 
   reference_lengths_.resize(num_sequences_);
   if (fread(&reference_lengths_[0], sizeof(int64_t), num_sequences_, fp) != num_sequences_) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable reference_lengths_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable reference_lengths_.");
+    return 3;
   }
 
   ////////////////////////////////////////
@@ -1008,7 +1030,8 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
   ////////////////////////////////////////
   int64_t seeds_len = 0;
   if (fread(&seeds_len, sizeof(seeds_len), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable seeds_len.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable seeds_len.");
+    return 3;
   }
 
   LOG_DEBUG_MEDHIGH("\t- Loading seeds (size: %ld)\n", seeds_len);
@@ -1022,36 +1045,46 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
 
   // Scalar values.
   if (fread(&use_minimizers_, sizeof(use_minimizers_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable use_minimizers_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable use_minimizers_.");
+    return 3;
   }
 
   if (fread(&minimizer_window_len_, sizeof(minimizer_window_len_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable minimizer_window_len_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable minimizer_window_len_.");
+    return 3;
   }
 
   double temp_percentil = 0.0;
   if (fread(&temp_percentil, sizeof(temp_percentil), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable percentil_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable percentil_.");
+    return 3;
   }
   if (temp_percentil != percentil_) {
-    LOG_ALL("WARNING: The seed hit frequency threshold used to build the index and the one provided via command line (or implicit default parameter values) mismatch! The loaded index uses frequency cutoff of %f, and the command line specifies %f. The loaded value will be used.\n", temp_percentil, percentil_);
+//    LOG_ALL("WARNING: The seed hit frequency threshold used to build the index and the one provided via command line (or implicit default parameter values) mismatch! The loaded index uses frequency cutoff of %f, and the command line specifies %f. The loaded value will be used.\n", temp_percentil, percentil_);
+    LOG_ALL("WARNING: The percentil value used to build the index and the one provided via command line (or implicit default parameter values) mismatch! The loaded index uses frequency percentil of %f, and the command line specifies %f. The loaded value will be used.\n", temp_percentil, percentil_);
+//    LOG_ALL("Cannot load index from file: percentil value in index file is different than the user specified one");
+//    return 3;
   }
   percentil_ = temp_percentil;
 
   if (fread(&count_cutoff_, sizeof(count_cutoff_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable count_cutoff_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable count_cutoff_.");
+    return 3;
   }
 
   if (fread(&avg_seed_occurrence_, sizeof(avg_seed_occurrence_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable avg_seed_occurrence_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable avg_seed_occurrence_.");
+    return 3;
   }
 
   if (fread(&max_seed_occurrence_, sizeof(max_seed_occurrence_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable avg_seed_occurrence_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable avg_seed_occurrence_.");
+    return 3;
   }
 
   if (fread(&stddev_seed_occurrence_, sizeof(stddev_seed_occurrence_), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable stddev_seed_occurrence_.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable stddev_seed_occurrence_.");
+    return 3;
   }
 
   // Load the indexing shapes as strings.
@@ -1059,18 +1092,21 @@ int MinimizerIndex::Deserialize_(FILE* fp) {
   LOG_DEBUG_MEDHIGH("\t- Loading index shapes\n");
   int64_t num_index_shapes = 0;
   if (fread(&num_index_shapes, sizeof(num_index_shapes), 1, fp) != 1) {
-    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable num_index_shapes.");
+//    FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable num_index_shapes.");
+    return 3;
   }
   std::vector<std::string> index_shapes;
   for (int64_t i=0; i<num_index_shapes; i++) {
     int64_t string_length = 0;
     if (fread(&string_length, sizeof(string_length), 1, fp) != 1) {
-      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable string_length.");
+//      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable string_length.");
+      return 3;
     }
 
     std::vector<char> new_string(string_length + 1, '\0');
     if (fread(&new_string[0], sizeof(char), string_length, fp) != string_length) {
-      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable new_header.");
+//      FATAL_REPORT(ERR_FILE_READ_DATA, "Occured when reading variable new_header.");
+      return 3;
     }
     new_string[string_length] = '\0';
     index_shapes.push_back(std::string(&new_string[0]));

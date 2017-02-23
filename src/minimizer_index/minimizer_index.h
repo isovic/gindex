@@ -343,7 +343,7 @@ class MinimizerIndex {
 
   ///////////////////////////////////////////////
   /// Constant values
-  static const int64_t version_ = 11;
+  static const int64_t version_ = 12;
 };
 
 /** Helper functions for debugging.
