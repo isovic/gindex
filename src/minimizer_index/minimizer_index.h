@@ -48,16 +48,16 @@ typedef dense_hash_map<uint64_t, SeedHashValue, std::hash<uint64_t> > SeedHashTy
 
 /** A factory function for Minimizer Index. Uses a default seed hash function.
  */
-std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes, double freq_percentil);
+std::unique_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes, double freq_percentil);
 
 /** A factory function for Minimizer Index. Loads the index from a given path.
  */
-std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path, double freq_percentil);
+std::unique_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path, double freq_percentil);
 
 class MinimizerIndex {
  public:
-  friend std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shape, double freq_percentils);
-  friend std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path, double freq_percentil);
+  friend std::unique_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shape, double freq_percentils);
+  friend std::unique_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path, double freq_percentil);
 
   ~MinimizerIndex();
 
