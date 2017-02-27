@@ -99,7 +99,7 @@ void MinimizerIndex::CalcShapeStats_(const std::vector<CompiledShape>& index_sha
   max_inclusive_bases = max_incl_bits / 2;
 }
 
-int MinimizerIndex::Create(const SequenceFile& seqs, float min_avg_seed_qv, bool index_reverse_strand, bool use_minimizers, int32_t minimizer_window_len, int32_t num_threads, bool verbose) {
+int MinimizerIndex::OldCreate(const SequenceFile& seqs, float min_avg_seed_qv, bool index_reverse_strand, bool use_minimizers, int32_t minimizer_window_len, int32_t num_threads, bool verbose) {
   Clear_();
 
   clock_t absolute_time = clock();
@@ -1196,14 +1196,14 @@ int64_t MinimizerIndex::RawPositionConverterWithRefId(int64_t raw_position, int6
   return reference_index;
 }
 
-void MinimizerIndex::CollectIndexSeeds(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
+void MinimizerIndex::OldCollectIndexSeeds(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
                                   float min_avg_seed_qv, bool index_reverse_strand,
                                   bool use_minimizers, int32_t minimizer_window_len,
                                   std::vector<uint128_t>& seed_list) const {
   CollectSeeds_(seqdata, seqqual, seqlen, index_reverse_strand, 0, 0, max_seed_len_, min_avg_seed_qv, use_minimizers, minimizer_window_len, index_shapes_, seed_list);
 }
 
-void MinimizerIndex::CollectLookupSeeds(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
+void MinimizerIndex::OldCollectLookupSeeds(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
                                   float min_avg_seed_qv, bool index_reverse_strand,
                                   bool use_minimizers, int32_t minimizer_window_len,
                                   std::vector<uint128_t>& seed_list) const {

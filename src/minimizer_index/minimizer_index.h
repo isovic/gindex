@@ -76,6 +76,21 @@ class MinimizerIndex {
                     bool use_minimizers, int32_t minimizer_window_len,
                     std::vector<uint128_t> &seed_list) const;
 
+  int OldCreate(const SequenceFile &seqs,
+             float min_avg_seed_qv, bool index_reverse_strand,
+             bool use_minimizers, int32_t minimizer_window_len,
+             int32_t num_threads, bool verbose=false);
+
+  void OldCollectIndexSeeds(const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+                    float min_avg_seed_q, bool index_reverse_strand,
+                    bool use_minimizers, int32_t minimizer_window_len,
+                    std::vector<uint128_t> &seed_list) const;
+
+  void OldCollectLookupSeeds(const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+                    float min_avg_seed_q, bool index_reverse_strand,
+                    bool use_minimizers, int32_t minimizer_window_len,
+                    std::vector<uint128_t> &seed_list) const;
+
   /* Writes the contents of the index to a file in binary format.
    * @path Path to a file where the index will be written to.
    * @return C-style return, 0 if everything went fine, 1 otherwisel
