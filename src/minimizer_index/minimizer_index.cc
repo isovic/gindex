@@ -16,11 +16,11 @@
 
 namespace is {
 
-std::unique_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes, double freq_percentil) {
+std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::vector<std::string> &shapes, double freq_percentil) {
   return std::unique_ptr<MinimizerIndex>(new MinimizerIndex(shapes, freq_percentil));
 }
 
-std::unique_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path, double freq_percentil) {
+std::shared_ptr<MinimizerIndex> createMinimizerIndex(const std::string& path, double freq_percentil) {
   return std::unique_ptr<MinimizerIndex>(new MinimizerIndex(path, freq_percentil));
 }
 
