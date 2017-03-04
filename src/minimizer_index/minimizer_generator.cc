@@ -38,15 +38,15 @@ int MinimizerGenerator::yield(const uint128_t& seed_in,
   q_.push_back(seed_in);
   num_added_keys_ += 1;
 
+  if (num_added_keys_ <= window_len_) {
+    return 2;
+  }
+
   if (seed_out == last_seed_out_) {
     return 1;
   }
 
   last_seed_out_ = seed_out;
-
-  if (num_added_keys_ <= window_len_) {
-    return 2;
-  }
 
   return 0;
 }

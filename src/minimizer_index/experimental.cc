@@ -38,7 +38,7 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
   TicToc tt_alloc;
   tt_alloc.start();
   seeds_.clear();
-  int64_t approx_num_seeds = data_length_ / minimizer_window_len + 1;     // An estimate.
+  int64_t approx_num_seeds = (data_length_ / (std::max(1, minimizer_window_len - 1))) + 1;     // An estimate. Uses minimizer_window_len - 1 to allocate more space.
   seeds_.reserve(approx_num_seeds);
   tt_alloc.stop();
 
@@ -57,7 +57,7 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
 
   for (int64_t i=0; i<num_sequences_; i++) {
     if (verbose) {
-      LOG_ALL("\rSequence %ld/%ld", (i + 1), seqs.get_sequences().size());
+      LOG_ALL("\rSequence %ld/%ld", (i + 1), num_sequences_);
     }
 
     int8_t *seqdata = (int8_t *) (&data_serialized_[0] + reference_starting_pos_[i]);
@@ -68,7 +68,7 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
     int64_t num_seeds_processed = AddSeeds_(seqdata, seqlen, seq_id,
                                             use_minimizers, minimizer_window_len, index_shapes_, seeds_);
     if (verbose) {
-      LOG_ALL("\nMemory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
+      LOG_NOHEADER(" Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
     }
   }
 
@@ -157,10 +157,11 @@ int64_t MinimizerIndex::AddSeeds_(const int8_t *seqdata, int64_t seqlen, int64_t
 
   int64_t seed_id = 0;
 
-  auto mg = createMinimizerGenerator(minimizer_window_len);
-
   /// Iterate through all split regions.
   for (int64_t i=0; i<split_start.size(); i++) {
+    // Start generating minimzers from scratch.
+    auto mg = createMinimizerGenerator(minimizer_window_len);
+
     /// We will use a buffer of 2-bit encoded bases, which will keep up to 32 bases at once.
     /// Fill the buffer for gapped spaced seed making. Buffer holds the next 8 bytes of data (max. 32 bases).
     /// Only seed_len bases are used, so the rest of the buffer is just to have the data ready.
