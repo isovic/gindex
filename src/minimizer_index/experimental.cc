@@ -37,16 +37,17 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
   // The seed_list_will contain all seeds that were obtained from the input sequences.
   TicToc tt_alloc;
   tt_alloc.start();
+
   seeds_.clear();
   int64_t approx_num_seeds = (data_length_ / (std::max(1, minimizer_window_len - 1))) + 1;     // An estimate. Uses minimizer_window_len - 1 to allocate more space.
   seeds_.reserve(approx_num_seeds);
+
   tt_alloc.stop();
 
   if (verbose) {
-    LOG_ALL("New index.\n");
     LOG_ALL("Allocated memory for a list of %ld seeds (128 bits each) (%.5f sec, diff: %.5f sec).\n", seeds_.capacity(), tt_alloc.get_secs(), tt_all.get_secs_current());
     LOG_ALL("Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
-    LOG_ALL("Collecting seeds with %ld threads.\n", num_threads);
+    LOG_ALL("Collecting seeds.\n");
     if (use_minimizers) {
       LOG_ALL("Minimizer seeds will be used. Minimizer window is %ld.\n", minimizer_window_len);
     }
@@ -57,7 +58,7 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
 
   for (int64_t i=0; i<num_sequences_; i++) {
     if (verbose) {
-      LOG_ALL("\rSequence %ld/%ld", (i + 1), num_sequences_);
+      LOG_ALL("\r%s Sequence: %ld/%ld, len: %ld, name: '%s'", FormatMemoryConsumptionAsString().c_str(), (i + 1), num_sequences_, reference_lengths_[i], TrimToFirstSpace(headers_[i]).c_str());
     }
 
     int8_t *seqdata = (int8_t *) (&data_serialized_[0] + reference_starting_pos_[i]);
@@ -67,9 +68,6 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
     // Collect all seeds.
     int64_t num_seeds_processed = AddSeeds_(seqdata, seqlen, seq_id,
                                             use_minimizers, minimizer_window_len, index_shapes_, seeds_);
-    if (verbose) {
-      LOG_NOHEADER(" Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
-    }
   }
 
   if (verbose) {
@@ -82,7 +80,7 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
 //  DumpSeeds("temp/seeds.dense.minimizers.csv", max_incl_bits_/2);
 
   if (verbose) {
-    LOG_ALL("Sorting the seeds.\n");
+    LOG_ALL("Sorting the seeds using %ld threads.\n", num_threads);
   }
 
   TicToc tt_sort;
