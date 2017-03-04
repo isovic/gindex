@@ -26,7 +26,7 @@ int MinimizerGenerator::yield(const uint128_t& seed_in,
     seed_out = q_.front();
 
     // Remove the elements which are out of this window-
-    while ((!q_.empty()) && Seed::seed_position(q_.front()) <= (num_added_keys_ - window_len_)) {
+    while ((!q_.empty()) && Seed::seed_position(q_.front()) <= (Seed::seed_position(seed_in) - window_len_)) {
       q_.pop_front();
     }
     // Remove smaller elements if any.
