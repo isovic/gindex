@@ -340,37 +340,37 @@ void MinimizerIndex::AssignData_(const SequenceFile& seqs, bool index_reverse_st
   }
 }
 
-void MinimizerIndex::AllocateSpaceForSeeds_(const SequenceFile& seqs, bool index_reverse_strand, int64_t num_shapes, int64_t max_seed_len, int64_t num_fwd_seqs, std::vector<int64_t>& seed_starts_for_seq, int64_t* total_num_seeds) {
-  seeds_.clear();
-  seed_starts_for_seq.clear();
-
-  // This will hold the address for beginnings of the lists of seeds for each
-  // individual indexed sequence. All seeds are stored in the same giant array,
-  // but are virtually split like this.
-  if (index_reverse_strand == true) {
-    seed_starts_for_seq.resize(seqs.get_sequences().size() * 2);
-  } else {
-    seed_starts_for_seq.resize(seqs.get_sequences().size() * 1);
-  }
-
-  // Distribute bins for forward strand.
-  *total_num_seeds = 0;
-  for (int64_t i=0; i<seqs.get_sequences().size(); i++) {
-    seed_starts_for_seq[i] = *total_num_seeds;
-    *total_num_seeds += (seqs.get_sequences()[i]->get_sequence_length() - max_seed_len) * num_shapes;
-  }
-
-  // Distribute bins for reverse strand if required.
-  if (index_reverse_strand == true) {
-    for (int64_t i=0; i<seqs.get_sequences().size(); i++) {
-      seed_starts_for_seq[seqs.get_sequences().size() + i] = *total_num_seeds;
-      *total_num_seeds += (seqs.get_sequences()[i]->get_sequence_length() - max_seed_len) * num_shapes;
-    }
-  }
-
-  /// The seed_list_will contain all seeds that were obtained from the input sequences.
-  seeds_.resize(*total_num_seeds, kInvalidSeed);
-}
+//void MinimizerIndex::AllocateSpaceForSeeds_(const SequenceFile& seqs, bool index_reverse_strand, int64_t num_shapes, int64_t max_seed_len, int64_t num_fwd_seqs, std::vector<int64_t>& seed_starts_for_seq, int64_t* total_num_seeds) {
+//  seeds_.clear();
+//  seed_starts_for_seq.clear();
+//
+//  // This will hold the address for beginnings of the lists of seeds for each
+//  // individual indexed sequence. All seeds are stored in the same giant array,
+//  // but are virtually split like this.
+//  if (index_reverse_strand == true) {
+//    seed_starts_for_seq.resize(seqs.get_sequences().size() * 2);
+//  } else {
+//    seed_starts_for_seq.resize(seqs.get_sequences().size() * 1);
+//  }
+//
+//  // Distribute bins for forward strand.
+//  *total_num_seeds = 0;
+//  for (int64_t i=0; i<seqs.get_sequences().size(); i++) {
+//    seed_starts_for_seq[i] = *total_num_seeds;
+//    *total_num_seeds += (seqs.get_sequences()[i]->get_sequence_length() - max_seed_len) * num_shapes;
+//  }
+//
+//  // Distribute bins for reverse strand if required.
+//  if (index_reverse_strand == true) {
+//    for (int64_t i=0; i<seqs.get_sequences().size(); i++) {
+//      seed_starts_for_seq[seqs.get_sequences().size() + i] = *total_num_seeds;
+//      *total_num_seeds += (seqs.get_sequences()[i]->get_sequence_length() - max_seed_len) * num_shapes;
+//    }
+//  }
+//
+//  /// The seed_list_will contain all seeds that were obtained from the input sequences.
+//  seeds_.resize(*total_num_seeds, kInvalidSeed);
+//}
 
 //int MinimizerIndex::CollectAllSeedsForSeq_( const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
 //                                            float min_avg_seed_qv, bool index_reverse_strand,
@@ -584,71 +584,71 @@ inline uint64_t MinimizerIndex::ReverseComplementSeed_(uint64_t seed, int32_t nu
   return rev_seed;
 }
 
-// Parameter window_len specifies the length of the window in the number of bases. For each base, there may be more than one seed
-// (e.g. rev. complement, multiple indexes, etc.), and for this reason the parameter num_seeds_per_base is given.
-// For example, if the array consists of a linear chain of only the forward strand and is obtained using only one hash function
-// (gapped spaced index), then num_seeds_per_base = 1.
-int MinimizerIndex::MakeMinimizers_(uint128_t* seed_list, int64_t num_seeds, int64_t num_seeds_per_base, int32_t window_len) {
-  if (window_len > num_seeds) { return 1; }
+//// Parameter window_len specifies the length of the window in the number of bases. For each base, there may be more than one seed
+//// (e.g. rev. complement, multiple indexes, etc.), and for this reason the parameter num_seeds_per_base is given.
+//// For example, if the array consists of a linear chain of only the forward strand and is obtained using only one hash function
+//// (gapped spaced index), then num_seeds_per_base = 1.
+//int MinimizerIndex::MakeMinimizers_(uint128_t* seed_list, int64_t num_seeds, int64_t num_seeds_per_base, int32_t window_len) {
+//  if (window_len > num_seeds) { return 1; }
+//
+//  std::deque<int> q(num_seeds_per_base*window_len);
+//
+//  // Setup the initial deque.
+//  for (int64_t i=0; i<window_len*num_seeds_per_base && i<num_seeds; i++) {
+//    // Remove smaller elements if any.
+//    while ( (!q.empty()) && Seed::seed_key(seed_list[i]) <= Seed::seed_key(seed_list[q.back()])) {
+//      q.pop_back();
+//    }
+//    q.push_back(i);
+//  }
+//
+//  std::vector<int64_t> minimizer_indices;
+//  minimizer_indices.reserve(num_seeds);
+//
+//  // If num_seeds_per_base is e.g. equal to 2, then
+//  // every other seed is potentially the reverse complement of the previous one.
+//  // Thus the sliding window will skip 2 instead of 1 seed.
+//  for (int64_t i=window_len*num_seeds_per_base; i<num_seeds; i+=num_seeds_per_base) {
+//    // Store the largest element of the previous window.
+//    minimizer_indices.push_back(q.front());
+//    // Remove the elements which are out of this window-
+//    while ((!q.empty()) && q.front() <= (i - window_len*num_seeds_per_base)) {
+//      q.pop_front();
+//    }
+//    // Remove smaller elements if any.
+//    while ( (!q.empty()) && Seed::seed_key(seed_list[i]) <= Seed::seed_key(seed_list[q.back()])) {
+//      q.pop_back();
+//    }
+//
+//    q.push_back(i);
+//  }
+//
+//  minimizer_indices.push_back(q.front());
+//
+//  // Remove excess seeds.
+//  std::vector<bool> keep;
+//  keep.resize(num_seeds, false);
+//  for (int64_t i=0; i<minimizer_indices.size(); i++) {
+//    keep[minimizer_indices[i]] = true;
+//  }
+//  for (int64_t i=0; i<num_seeds; i++) {
+//    if (keep[i] == false) {
+//      set_invalid_seed(seed_list[i]);
+//    }
+//  }
+//
+//  return 0;
+//}
 
-  std::deque<int> q(num_seeds_per_base*window_len);
-
-  // Setup the initial deque.
-  for (int64_t i=0; i<window_len*num_seeds_per_base && i<num_seeds; i++) {
-    // Remove smaller elements if any.
-    while ( (!q.empty()) && Seed::seed_key(seed_list[i]) <= Seed::seed_key(seed_list[q.back()])) {
-      q.pop_back();
-    }
-    q.push_back(i);
-  }
-
-  std::vector<int64_t> minimizer_indices;
-  minimizer_indices.reserve(num_seeds);
-
-  // If num_seeds_per_base is e.g. equal to 2, then
-  // every other seed is potentially the reverse complement of the previous one.
-  // Thus the sliding window will skip 2 instead of 1 seed.
-  for (int64_t i=window_len*num_seeds_per_base; i<num_seeds; i+=num_seeds_per_base) {
-    // Store the largest element of the previous window.
-    minimizer_indices.push_back(q.front());
-    // Remove the elements which are out of this window-
-    while ((!q.empty()) && q.front() <= (i - window_len*num_seeds_per_base)) {
-      q.pop_front();
-    }
-    // Remove smaller elements if any.
-    while ( (!q.empty()) && Seed::seed_key(seed_list[i]) <= Seed::seed_key(seed_list[q.back()])) {
-      q.pop_back();
-    }
-
-    q.push_back(i);
-  }
-
-  minimizer_indices.push_back(q.front());
-
-  // Remove excess seeds.
-  std::vector<bool> keep;
-  keep.resize(num_seeds, false);
-  for (int64_t i=0; i<minimizer_indices.size(); i++) {
-    keep[minimizer_indices[i]] = true;
-  }
-  for (int64_t i=0; i<num_seeds; i++) {
-    if (keep[i] == false) {
-      set_invalid_seed(seed_list[i]);
-    }
-  }
-
-  return 0;
-}
-
-int MinimizerIndex::FlagDuplicates_(uint128_t* seed_list, int64_t num_seeds) const {
-  for (int64_t i=1; i<num_seeds; i++) {
-    if (seed_list[i-1] == seed_list[i]) {
-      set_invalid_seed(seed_list[i-1]);
-//      seed_list[i-1] = 0;
-    }
-  }
-  return 0;
-}
+//int MinimizerIndex::FlagDuplicates_(uint128_t* seed_list, int64_t num_seeds) const {
+//  for (int64_t i=1; i<num_seeds; i++) {
+//    if (seed_list[i-1] == seed_list[i]) {
+//      set_invalid_seed(seed_list[i-1]);
+////      seed_list[i-1] = 0;
+//    }
+//  }
+//  return 0;
+//}
 
 void MinimizerIndex::DumpHash(std::string out_path, int32_t num_bases) {
   FILE *fp = fopen(out_path.c_str(), "w");
@@ -769,19 +769,19 @@ int MinimizerIndex::OccurrenceStatistics_(double percentil, int32_t num_threads,
   return 0;
 }
 
-int64_t MinimizerIndex::MakeSeedListDense_(uint128_t* seed_list, int64_t num_seeds) {
-  int64_t offset = 0;
-  int64_t i = 0;
-  for (i=0; (i+offset)<num_seeds; i++) {
-    while ((i+offset) < num_seeds && invalid_seed(seed_list[i+offset]) == true) {
-      offset += 1;
-    }
-    if ((i+offset) < num_seeds) {
-      seed_list[i] = seed_list[i+offset];
-    }
-  }
-  return i;
-}
+//int64_t MinimizerIndex::MakeSeedListDense_(uint128_t* seed_list, int64_t num_seeds) {
+//  int64_t offset = 0;
+//  int64_t i = 0;
+//  for (i=0; (i+offset)<num_seeds; i++) {
+//    while ((i+offset) < num_seeds && invalid_seed(seed_list[i+offset]) == true) {
+//      offset += 1;
+//    }
+//    if ((i+offset) < num_seeds) {
+//      seed_list[i] = seed_list[i+offset];
+//    }
+//  }
+//  return i;
+//}
 
 int MinimizerIndex::Store(const std::string& path) {
   LOG_DEBUG("Storing index to file '%s'.\n", path.c_str());

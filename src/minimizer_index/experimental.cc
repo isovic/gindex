@@ -75,7 +75,7 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
     LOG_ALL("Final memory allocation after collecting seeds: %s\n", FormatMemoryConsumptionAsString().c_str());
   }
 
-  if (verbose) { LOG_NEWLINE; }
+//  if (verbose) { LOG_NEWLINE; }
 
 //  DumpSeeds("temp/seeds.dense.minimizers.csv", max_incl_bits_/2);
 
@@ -94,7 +94,7 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
 //  diff_time = clock();
 
   if (verbose) {
-    LOG_ALL("Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
+//    LOG_ALL("Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
     LOG_ALL("Generating the hash table.\n");
   }
 
@@ -105,14 +105,14 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
 
   // Calculate a cutoff threshold as a percentil of the occurrence of a seed.
   if (verbose) {
-    LOG_ALL("Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
+//    LOG_ALL("Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
     LOG_ALL("Calculating the distribution statistics for key counts.\n");
   }
 
   OccurrenceStatistics_(percentil_, num_threads, &avg_seed_occurrence_, &max_seed_occurrence_, &stddev_seed_occurrence_, &count_cutoff_);
 
   if (verbose) {
-    LOG_ALL("Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
+//    LOG_ALL("Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
     LOG_ALL("Index statistics: average key count = %f, max key count = %f, std dev = %f, percentil (%.2f%%) (count cutoff) = %f\n",
             avg_seed_occurrence_, max_seed_occurrence_, stddev_seed_occurrence_, percentil_*100.0, count_cutoff_);
   }
