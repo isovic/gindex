@@ -43,6 +43,7 @@ int MinimizerIndex::Create(const SequenceFile &seqs,
   tt_alloc.stop();
 
   if (verbose) {
+    LOG_ALL("New index.\n");
     LOG_ALL("Allocated memory for a list of %ld seeds (128 bits each) (%.5f sec, diff: %.5f sec).\n", seeds_.capacity(), tt_alloc.get_secs(), tt_all.get_secs_current());
     LOG_ALL("Memory consumption: %s\n", FormatMemoryConsumptionAsString().c_str());
     LOG_ALL("Collecting seeds with %ld threads.\n", num_threads);
