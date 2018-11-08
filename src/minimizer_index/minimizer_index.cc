@@ -1264,7 +1264,7 @@ int MinimizerIndex::FindWithBuffer(const int8_t* seed, int32_t seed_len, uint64_
                          std::vector<const uint128_t*>& hits,
                          std::vector<int64_t> &num_hits, std::vector<uint64_t> &keys) const {
 
-  CalcKeysFromSeedWithBuffer(seed, seed_len, buffer, keys);
+  CalcKeysFromSeedWithBuffer(seed, seed_len, keys, buffer);
 
   hits.clear();
   num_hits.clear();
@@ -1342,7 +1342,7 @@ void MinimizerIndex::CalcKeysFromSeed(const int8_t* seed, int32_t seed_len, std:
   }
 }
 
-void MinimizerIndex::CalcKeysFromSeedWithBuffer(const int8_t* seed, int32_t seed_len, std::vector<uint64_t> &keys, uint64_t *buffer,) const {
+void MinimizerIndex::CalcKeysFromSeedWithBuffer(const int8_t* seed, int32_t seed_len, std::vector<uint64_t> &keys, uint64_t *buffer) const {
 	*buffer = *buffer << 2;
     int8_t seqbase = kBaseToBwa[seed[0]];
     *buffer = *buffer | (((uint64_t) seqbase) << (sizeof(*buffer)*8 - (seed_len-1)*2 - 2));

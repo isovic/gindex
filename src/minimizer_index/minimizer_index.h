@@ -123,7 +123,7 @@ class MinimizerIndex {
   /* For a given seed, calculate keys for all lookup shapes.
    */
   void CalcKeysFromSeed(const int8_t *seed, int32_t seed_len, std::vector<uint64_t> &keys) const;
-  void CalcKeysFromSeedWithBuffer(const int8_t* seed, int32_t seed_len, uint64_t *buffer, std::vector<uint64_t> &keys) const;
+  void CalcKeysFromSeedWithBuffer(const int8_t* seed, int32_t seed_len, std::vector<uint64_t> &keys, uint64_t *buffer) const;
 
   uint64_t CalculateInitialBuffer(const int8_t* seed, int32_t seed_len);
 
