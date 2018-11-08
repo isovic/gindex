@@ -33,6 +33,7 @@
 #include "compiled_shape.h"
 #include "index_pos.h"
 #include "minimizer_index_consts.h"
+#include "seed.h"
 
 namespace is {
 
@@ -76,6 +77,21 @@ class MinimizerIndex {
                     bool use_minimizers, int32_t minimizer_window_len,
                     std::vector<uint128_t> &seed_list) const;
 
+//  int OldCreate(const SequenceFile &seqs,
+//             float min_avg_seed_qv, bool index_reverse_strand,
+//             bool use_minimizers, int32_t minimizer_window_len,
+//             int32_t num_threads, bool verbose=false);
+//
+//  void OldCollectIndexSeeds(const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+//                    float min_avg_seed_q, bool index_reverse_strand,
+//                    bool use_minimizers, int32_t minimizer_window_len,
+//                    std::vector<uint128_t> &seed_list) const;
+//
+//  void OldCollectLookupSeeds(const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+//                    float min_avg_seed_q, bool index_reverse_strand,
+//                    bool use_minimizers, int32_t minimizer_window_len,
+//                    std::vector<uint128_t> &seed_list) const;
+
   /* Writes the contents of the index to a file in binary format.
    * @path Path to a file where the index will be written to.
    * @return C-style return, 0 if everything went fine, 1 otherwisel
@@ -114,31 +130,6 @@ class MinimizerIndex {
   /* Looks up all hits for a specific, calculated keys.
    */
   int KeyLookup(uint64_t seed_key, const uint128_t **seeds, int64_t *num_seeds) const;
-
-  /* Extract the position from a packed seed.
-   */
-  static inline int32_t seed_position(uint128_t seed) {
-    return (int32_t) ((seed & kSeedMaskPos));
-  }
-
-  /* Extract the sequence ID from a packed seed.
-   */
-  static inline int32_t seed_seq_id(uint128_t seed) {
-    return (int32_t) ((seed & kSeedMaskSeqId) >> 32);
-  }
-
-  /* Extract the key from a packed seed.
-   */
-  static inline int64_t seed_key(uint128_t seed) {
-    return (int64_t) ((seed >> 64));
-  }
-
-  /* Create a packed seed from the three components.
-   */
-  static inline uint128_t make_seed(uint64_t key, uint64_t seq_id, uint64_t position) {
-    return (((uint128_t) key) << 64) | (((uint128_t) seq_id) << 32)
-        | (((uint128_t) position) << 0);
-  }
 
   /* A debug function which writes the hash to a file on disk.
    * @out_path Path to a file on disk where data will be written to.
@@ -252,28 +243,33 @@ class MinimizerIndex {
                               std::vector<int64_t> &seed_starts_for_seq,
                               int64_t *total_num_seeds);
 
-  static int CollectAllSeedsForSeq_(
-      const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
-      float min_avg_seed_qv, bool index_reverse_strand,
-      uint64_t seq_id_fwd, uint64_t seq_id_rev,
-      const std::vector<CompiledShape> &compiled_shapes,
-      uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
+//  static int CollectAllSeedsForSeq_(
+//      const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+//      float min_avg_seed_qv, bool index_reverse_strand,
+//      uint64_t seq_id_fwd, uint64_t seq_id_rev,
+//      const std::vector<CompiledShape> &compiled_shapes,
+//      uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
+//
+//  static int CollectAllSeedsForSeqWithQual_(
+//      const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
+//      float min_avg_seed_qv, bool index_reverse_strand,
+//      uint64_t seq_id_fwd, uint64_t seq_id_rev,
+//      const std::vector<CompiledShape> &compiled_shapes,
+//      uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
+//
+//  static int CollectAllSeedsForSeqWithOutQual_(
+//      const int8_t *seqdata, int64_t seqlen,
+//      bool index_reverse_strand,
+//      uint64_t seq_id_fwd, uint64_t seq_id_rev,
+//      const std::vector<CompiledShape> &compiled_shapes,
+//      uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
 
-  static int CollectAllSeedsForSeqWithQual_(
-      const int8_t *seqdata, const int8_t *seqqual, int64_t seqlen,
-      float min_avg_seed_qv, bool index_reverse_strand,
-      uint64_t seq_id_fwd, uint64_t seq_id_rev,
-      const std::vector<CompiledShape> &compiled_shapes,
-      uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
+  int64_t AddSeeds_(const int8_t *seqdata, int64_t seqlen, int64_t seq_id, bool use_minimizers, int32_t minimizer_window_len,
+                    const std::vector<CompiledShape> &compiled_shapes, std::vector<uint128_t>& seeds) const;
 
-  static int CollectAllSeedsForSeqWithOutQual_(
-      const int8_t *seqdata, int64_t seqlen,
-      bool index_reverse_strand,
-      uint64_t seq_id_fwd, uint64_t seq_id_rev,
-      const std::vector<CompiledShape> &compiled_shapes,
-      uint128_t* seed_list_fwd, uint128_t* seed_list_rev);
-
-  static inline uint64_t SeedHashFunctionDefault_(uint64_t seed, int32_t k);
+  static inline uint64_t SeedHashFunctionDefault_(uint64_t seed, int32_t k) {
+    return seed;
+  }
 
   static inline uint64_t ReverseComplementSeed_(uint64_t seed,
                                                 int32_t num_bases);
@@ -299,10 +295,10 @@ class MinimizerIndex {
    * @seq_id_rev When indexing a sequence, fwd and rev are separately indexed. Fwd are usually indexed first, and rev after that, which means that rev will usually have ID of (seq_id_fwd + num_sequences_forward_.
    * @seed_list A vector of all compiled seeds.
    */
-  void CollectSeeds_(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
-                     bool index_reverse_strand, uint64_t seq_id_fwd, uint64_t seq_id_rev,
-                     int64_t max_seed_len, float min_avg_seed_qv, bool use_minimizers, int32_t minimizer_window_len,
-                     const std::vector<CompiledShape> &index_shapes, std::vector<uint128_t> &seed_list) const;
+//  void CollectSeeds_(const int8_t* seqdata, const int8_t* seqqual, int64_t seqlen,
+//                     bool index_reverse_strand, uint64_t seq_id_fwd, uint64_t seq_id_rev,
+//                     int64_t max_seed_len, float min_avg_seed_qv, bool use_minimizers, int32_t minimizer_window_len,
+//                     const std::vector<CompiledShape> &index_shapes, std::vector<uint128_t> &seed_list) const;
 
 
 
