@@ -93,6 +93,9 @@ class MinimizerIndex {
    * in order to prevent potential copying of a large number of hits (for performance purposes).
    */
   int Find(const int8_t* seed, int32_t seed_len, bool threshold_hits, std::vector<const uint128_t *> &hits, std::vector<int64_t> &num_hits) const;
+  int FindWithBuffer(const int8_t* seed, int32_t seed_len, uint64_t *buffer, bool threshold_hits,
+                           std::vector<const uint128_t*>& hits,
+                           std::vector<int64_t> &num_hits, std::vector<uint64_t> &keys) const;
 
   /* For a given C-style seed, all lookup keys are compiled from lookup shapes, and queried.
    * All hits are copied to a new vector (unlike the alternative Find function) and self contained.
@@ -104,6 +107,9 @@ class MinimizerIndex {
   /* For a given seed, calculate keys for all lookup shapes.
    */
   void CalcKeysFromSeed(const int8_t *seed, int32_t seed_len, std::vector<uint64_t> &keys) const;
+  void CalcKeysFromSeedWithBuffer(const int8_t* seed, int32_t seed_len, uint64_t *buffer, std::vector<uint64_t> &keys) const;
+
+  uint64_t CalculateInitialBuffer(const int8_t* seed, int32_t seed_len);
 
   /* Looks up all hits for a specific, calculated keys.
    */

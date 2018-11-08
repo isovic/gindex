@@ -1176,8 +1176,7 @@ int64_t MinimizerIndex::RawPositionConverterWithRefId(int64_t raw_position, int6
 
   if (((uint64_t) reference_index) >= num_sequences_forward_) {
     // Relative position has to be changed, because, from the outside, it is expected that we have reverse-complemented the seed and not the reference sequence.
-//    relative_pos = reference_lengths_[(uint64_t) reference_index] - relative_pos - query_length - 1 - reference_index;      // The '-1' is to compensate for the '!' character added at the end of every sequence in the data array.
-    relative_pos = reference_lengths_[(uint64_t) reference_index] - relative_pos - query_length - 1;
+    relative_pos = reference_lengths_[(uint64_t) reference_index] - relative_pos - query_length;
 
     // Unlike BWA, we haven't reversed the order of sequences when their reverse complements were added to the index. That is why we only need to subtract the number of forward sequences, and not do (2*num_forward_sequences - gene_idx - 1).
     reference_index = reference_index - ((int64_t) num_sequences_forward_);
@@ -1261,6 +1260,38 @@ int MinimizerIndex::Find(const int8_t* seed, int32_t seed_len, bool threshold_hi
   return 0;
 }
 
+int MinimizerIndex::FindWithBuffer(const int8_t* seed, int32_t seed_len, uint64_t *buffer, bool threshold_hits,
+                         std::vector<const uint128_t*>& hits,
+                         std::vector<int64_t> &num_hits, std::vector<uint64_t> &keys) const {
+
+  CalcKeysFromSeedWithBuffer(seed, seed_len, buffer, keys);
+
+  hits.clear();
+  num_hits.clear();
+
+  int i = 0;
+
+  for (auto& key: keys) {
+    const uint128_t *seeds = NULL;
+    int64_t num_seeds = 0;
+
+    int lookup_ret = 0;
+    	lookup_ret = KeyLookup(key, &seeds, &num_seeds);
+
+    if (!lookup_ret) {
+    		hits.push_back(seeds);
+    		num_hits.push_back(num_seeds);
+    		i++;
+    }
+  }
+
+  if (i == 0) {
+    return 1;
+  }
+
+  return 0;
+}
+
 int MinimizerIndex::FindAndJoin(const int8_t* seed, int32_t seed_len, bool threshold_hits, std::vector<uint128_t> &hits) const {
   std::vector<const uint128_t*> hits_ptr;
   std::vector<int64_t> num_hits_ptr;
@@ -1287,8 +1318,16 @@ int MinimizerIndex::FindAndJoin(const int8_t* seed, int32_t seed_len, bool thres
   return 0;
 }
 
-void MinimizerIndex::CalcKeysFromSeed(const int8_t* seed, int32_t seed_len,
-                                       std::vector<uint64_t> &keys) const {
+uint64_t MinimizerIndex::CalculateInitialBuffer(const int8_t* seed, int32_t seed_len) {
+	  uint64_t buffer = 0;
+	  for (int32_t j=0; j<seed_len && j<32; j++) {
+	    int8_t seqbase = kBaseToBwa[seed[j]];
+	    buffer |= (((uint64_t) seqbase) << (sizeof(buffer)*8 - j*2 - 2));
+	  }
+	  return buffer;
+}
+
+void MinimizerIndex::CalcKeysFromSeed(const int8_t* seed, int32_t seed_len, std::vector<uint64_t> &keys) const {
   uint64_t buffer = 0;
   for (int32_t j=0; j<seed_len && j<32; j++) {
     int8_t seqbase = kBaseToBwa[seed[j]];
@@ -1296,10 +1335,25 @@ void MinimizerIndex::CalcKeysFromSeed(const int8_t* seed, int32_t seed_len,
   }
 
   keys.clear();
+
   for (int32_t i=0; i<lookup_shapes_.size(); i++) {
-    uint64_t seed = lookup_shapes_[i].CreateSeedFromShape(buffer);
-    keys.push_back(seed);
+	uint64_t seed = lookup_shapes_[i].CreateSeedFromShape(buffer);
+	keys.push_back(seed);
   }
+}
+
+void MinimizerIndex::CalcKeysFromSeedWithBuffer(const int8_t* seed, int32_t seed_len, std::vector<uint64_t> &keys, uint64_t *buffer,) const {
+	*buffer = *buffer << 2;
+    int8_t seqbase = kBaseToBwa[seed[0]];
+    *buffer = *buffer | (((uint64_t) seqbase) << (sizeof(*buffer)*8 - (seed_len-1)*2 - 2));
+
+    keys.clear();
+
+    for (int32_t i=0; i<lookup_shapes_.size(); i++) {
+    		uint64_t seed_result = 0;
+    		seed_result = lookup_shapes_[i].CreateSeedFromShape(*buffer);
+    		keys.push_back(seed_result);
+    }
 }
 
 std::string PrintSeed(uint128_t seed) {
